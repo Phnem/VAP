@@ -1,58 +1,58 @@
 # VAP — Vetro Android Player
 
-**Плеер из Vetro Collection — теперь как отдельное Android-приложение в семействе Vetro.**
+**The player from Vetro Collection, now a standalone Android app in the Vetro family.**
 
 [![Release](https://img.shields.io/github/v/release/Phnem/VAP?label=release)](https://github.com/Phnem/VAP/releases/latest)
 [![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&logoColor=white)](https://github.com/Phnem/VAP/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-VAP (Vetro Android Player) развивает видеоплеер Vetro Collection в самостоятельном приложении: собственная библиотека видео, локальное и сетевое воспроизведение, работа с субтитрами и ИИ-инструменты. Он сохраняет характер семейства Vetro: матовые стеклянные панели, анимации, светлую и тёмную темы. Интерфейс доступен на русском и английском языках.
+VAP (Vetro Android Player) brings the video player from Vetro Collection into its own app, with a dedicated video library, local and network playback, subtitle tools, and on-device AI. It shares the Vetro family's visual language: frosted glass panels, animations, and light and dark themes. The interface supports English and Russian.
 
-## Скачать
+## Download
 
-Текущая версия — **v0.1-Stable**. Подписанные APK доступны в [GitHub Releases](https://github.com/Phnem/VAP/releases/latest).
+The current release is **v0.1-Stable**. Download signed APKs from [GitHub Releases](https://github.com/Phnem/VAP/releases/latest).
 
-| APK | Для чего |
+| APK | Choose this for |
 | --- | --- |
-| **VAP-v0.1-Stable-foss.apk** | Основная сборка без Google Cast SDK. Локальное видео, сеть, DLNA и ИИ-инструменты. |
-| **VAP-v0.1-Stable-cast.apk** | Те же возможности плюс Google Cast. Включает Google Cast SDK. |
+| **VAP-v0.1-Stable-foss.apk** | The main build without the Google Cast SDK. Includes local playback, network sources, DLNA, and AI tools. |
+| **VAP-v0.1-Stable-cast.apk** | Everything in the main build, plus Google Cast. Includes the Google Cast SDK. |
 
-Оба APK универсальные: `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`. Требуется **Android 8.0 / API 26 или новее**. Варианты используют один package ID `com.phnem.vap` и устанавливаются как одно приложение; одновременно держать их нельзя. При обновлении поверх APK с той же подписью данные сохраняются.
+Both APKs are universal builds for `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`. Requires **Android 8.0 / API 26 or later**. Both variants use the package ID `com.phnem.vap` and replace each other when installed. Updating an installation signed with the same key preserves app data.
 
-Скачайте APK, разрешите установку из выбранного браузера или файлового менеджера и откройте файл. При первом запуске выберите язык, тему и доступ к видео. Дополнительные папки можно подключить через системный выбор каталога.
+Download an APK, allow installation from your browser or file manager, and open the file. On first launch, choose a language and theme, then grant access to videos. You can add more folders through the system folder picker.
 
-## Возможности
+## Features
 
-- **Библиотека:** поиск доступных видео через MediaStore, дополнительные SAF-папки, дерево каталогов, сетка и список, превью, поиск, сортировка и фильтры.
-- **Организация просмотра:** избранное, скрытые папки, история, продолжение с сохранённой позиции, плейлисты и очередь.
-- **Плеер:** AndroidX Media3 / ExoPlayer, управление жестами, скорость, масштаб и пропорции кадра, выбор дорожек, фоновое воспроизведение и «картинка в картинке».
-- **Звук и изображение:** настройки обработки, внешние аудиодорожки, синхронизация звука, снимки и инструменты экспорта фрагментов.
-- **Субтитры:** встроенные и внешние дорожки, SRT/VTT и стилизованные ASS/SSA через libass, две дорожки одновременно, задержка, редактирование текста и экспорт.
-- **Сеть:** HTTP(S), HLS, DASH, SMB, WebDAV, FTP/FTPS и SFTP; подключение Jellyfin, Emby, Plex и просмотр DLNA-источников.
-- **Трансляция:** DLNA; Google Cast дополнительно в варианте `cast`.
-- **Whisper:** создание субтитров на устройстве после загрузки модели; обработка конечного видео фрагментами, кэширование и отмена.
-- **Перевод:** локальный EN → RU и RU → EN через CTranslate2; опциональный облачный перевод через настраиваемый совместимый API с собственным ключом.
-- **Smart Sync:** оценка сдвига и равномерного дрейфа субтитров по распознанной речи.
+- **Video library:** MediaStore scanning, additional Storage Access Framework (SAF) folders, directory trees, grid and list layouts, thumbnails, search, sorting, and filters.
+- **Watch organization:** favorites, hidden folders, history, resume playback, playlists, and a playback queue.
+- **Playback:** AndroidX Media3 / ExoPlayer, gesture controls, playback speed, zoom and aspect ratio settings, track selection, background playback, and picture-in-picture.
+- **Audio and video tools:** processing settings, external audio tracks, audio synchronization, screenshots, and clip export tools.
+- **Subtitles:** embedded and external tracks, SRT/VTT, styled ASS/SSA through libass, two simultaneous tracks, timing offsets, text editing, and export.
+- **Network sources:** HTTP(S), HLS, DASH, SMB, WebDAV, FTP/FTPS, and SFTP; Jellyfin, Emby, Plex, and browsing DLNA sources.
+- **TV playback:** DLNA, with Google Cast available in the `cast` variant.
+- **Whisper:** on-device subtitle generation after downloading a model, with chunked processing of finite videos, caching, and cancellation.
+- **Translation:** local EN → RU and RU → EN translation through CTranslate2, plus optional cloud translation using a configurable compatible API and your own key.
+- **Smart Sync:** estimates subtitle offsets and uniform timing drift from recognized speech.
 
-## Что учитывать
+## Limitations and requirements
 
-Поддержка контейнеров, кодеков, HDR, звуковых форматов и экспорта зависит от Android, декодеров устройства и источника. Универсальное транскодирование для телевизоров не реализовано; совместимость с конкретным DLNA/Cast-приёмником требует проверки.
+Container, codec, HDR, audio format, and export support depend on Android, the device's decoders, and the source. Universal transcoding for TV receivers is not implemented. Compatibility with a particular DLNA or Cast receiver needs to be tested.
 
-Модели Whisper и локального перевода **не входят в APK**: они скачиваются отдельно из интерфейса. После загрузки локальное распознавание и перевод работают без сети. Потоковые live-субтитры не реализованы. Smart Sync рассчитан на субтитры на языке речи; для сильно перемонтированного видео и отдельных вставок результат может быть недостоверным. Облачный перевод отправляет текст выбранному пользователем сервису.
+Whisper and local translation models are **downloaded separately from the app** and are not bundled in the APK. Once downloaded, local recognition and translation work offline. Streaming live subtitles are not implemented. Smart Sync expects subtitles in the language of the speech; heavily edited videos and inserted scenes may produce unreliable results. Cloud translation sends text to the service you configure.
 
-Для поиска через OpenSubtitles и облачных функций нужны собственные учётные данные. Приложение не поставляет фильмы, серверы или подписки на сторонние сервисы.
+OpenSubtitles search and cloud features require your own credentials. VAP does not provide movies, servers, or subscriptions to third-party services.
 
-## Сборка из исходников
+## Build from source
 
-### Окружение
+### Prerequisites
 
 - JDK **21**.
-- Android SDK Platform **36**, Build Tools **35.0.0** (выбор по умолчанию AGP 8.13), NDK **27.0.12077973**, CMake **3.22.1**.
-- Python **3.12+**, доступный командой `python`, с поддержкой `venv` и `pip`.
-- Компилятор C для хостовых генераторов FriBidi: MSVC Build Tools в Windows или системный toolchain в Linux.
-- Интернет для первоначальной загрузки Gradle, зависимостей и закреплённых архивов нативных библиотек.
+- Android SDK Platform **36**, Build Tools **35.0.0** (the default for AGP 8.13), NDK **27.0.12077973**, and CMake **3.22.1**.
+- Python **3.12+**, available as `python`, with `venv` and `pip`.
+- A host C compiler for FriBidi's build-time generators: MSVC Build Tools on Windows or a system toolchain on Linux.
+- Internet access for the initial download of Gradle, dependencies, and pinned native source archives.
 
-Gradle **8.13** поставляется через wrapper. Укажите SDK в `local.properties` (`sdk.dir=...`); для Python-скриптов при нестандартном расположении SDK задайте также `ANDROID_HOME` или `ANDROID_SDK_ROOT`. Установите NDK и CMake через SDK Manager Android Studio.
+Gradle **8.13** is provided through the wrapper. Set the SDK location in `local.properties` (`sdk.dir=...`). For Python scripts, also set `ANDROID_HOME` or `ANDROID_SDK_ROOT` if your SDK uses a non-default location. Install the specified NDK and CMake versions through Android Studio's SDK Manager.
 
 ```sh
 git clone https://github.com/Phnem/VAP.git
@@ -60,52 +60,52 @@ cd VAP
 ./gradlew :app:assembleFossDebug
 ```
 
-В PowerShell используйте `.\gradlew.bat` вместо `./gradlew`. Debug APK: `app/build/outputs/apk/foss/debug/app-foss-debug.apk`. Для варианта с Google Cast используйте задачу `:app:assembleCastDebug`.
+In PowerShell, use `.\gradlew.bat` instead of `./gradlew`. The debug APK is written to `app/build/outputs/apk/foss/debug/app-foss-debug.apk`. To build with Google Cast, use `:app:assembleCastDebug`.
 
-Сборка автоматически готовит libass, FreeType, HarfBuzz, FriBidi, whisper.cpp, CTranslate2 и SentencePiece. Исходники и хэши закреплены в скриптах `tools/prepare-*-source.py` и `tools/native/wraps/`. Подробнее: [нативный backend субтитров](docs/subtitle-native-build.md).
+The build automatically prepares libass, FreeType, HarfBuzz, FriBidi, whisper.cpp, CTranslate2, and SentencePiece. Source revisions and hashes are pinned in `tools/prepare-*-source.py` and `tools/native/wraps/`. See the [native subtitle build guide](docs/subtitle-native-build.md).
 
-### Подписанный релиз
+### Signed release
 
-Скопируйте `keystore.properties.example` в **неотслеживаемый** `keystore.properties` и укажите существующий ключ подписи. Файл с паролями и ключ не должны попадать в Git.
+Copy `keystore.properties.example` to an **untracked** `keystore.properties` and configure your signing key. Keep the key and passwords out of Git.
 
 ```sh
 ./gradlew :app:assembleFossRelease :app:assembleCastRelease
 ```
 
-Результаты находятся в `app/build/outputs/apk/{foss,cast}/release/`. Без локального `keystore.properties` release APK остаётся неподписанным и не устанавливается на Android. R8 и сокращение ресурсов включены в release. Для обновлений используйте тот же ключ и увеличивайте `versionCode`.
+APKs are written to `app/build/outputs/apk/{foss,cast}/release/`. Without a local `keystore.properties`, release APKs remain unsigned and cannot be installed on Android. Release builds use R8 and resource shrinking. Use the same signing key and increase `versionCode` for updates.
 
-После проверки подписи командой Android SDK `apksigner verify` выполните `python tools/package-release.py`: скрипт проверит версию и ABI, подготовит именованные APK, архив исходников нативных зависимостей и `SHA256SUMS.txt` в `dist/<версия>/`.
+After verifying the signatures with the Android SDK's `apksigner verify`, run `python tools/package-release.py`. It checks the version and ABIs, then creates named APKs, a native dependency source archive, and `SHA256SUMS.txt` in `dist/<version>/`.
 
-### Проверки
+### Checks
 
 ```sh
 ./gradlew :app:testFossReleaseUnitTest :app:testCastReleaseUnitTest
 ./gradlew :app:lintFossRelease :app:lintCastRelease
 ```
 
-Инструментальные тесты и подготовка медиафикстур находятся в `app/src/androidTest/` и `tools/`. Скрипт `tools/test-playback-device.ps1` устанавливает debug APK: используйте тестовое устройство с подходящей подписью, чтобы не удалять данные рабочей установки.
+Instrumentation tests and media fixture tools are in `app/src/androidTest/` and `tools/`. The `tools/test-playback-device.ps1` script installs debug APKs. Use a test device with a compatible signing key to avoid removing data from an existing installation.
 
-## Устройство проекта
+## Project structure
 
-| Каталог | Содержимое |
+| Directory | Contents |
 | --- | --- |
-| `app/src/main/java/com/phnem/vap/library/` | Сканирование, проекции библиотеки и миниатюры |
-| `app/src/main/java/com/phnem/vap/player/` | Воспроизведение, звук, изображение и субтитры |
-| `app/src/main/java/com/phnem/vap/network/` | Сетевые протоколы, серверы и хранение подключений |
-| `app/src/main/java/com/phnem/vap/cast/` | Удалённое воспроизведение и DLNA |
-| `app/src/main/java/com/phnem/vap/ai/` | Модели, Whisper, перевод и Smart Sync |
-| `app/src/main/java/com/phnem/vap/ui/` | Compose-интерфейс, темы и анимации |
-| `app/src/main/cpp/` | JNI и конфигурация нативной сборки |
-| `app/src/cast/`, `app/src/nocast/` | Отличия вариантов с Google Cast и без него |
-| `docs/`, `tools/` | Технические отчёты, инструкции, сборка и проверки |
+| `app/src/main/java/com/phnem/vap/library/` | Scanning, library projections, and thumbnails |
+| `app/src/main/java/com/phnem/vap/player/` | Playback, audio, video, and subtitles |
+| `app/src/main/java/com/phnem/vap/network/` | Network protocols, media servers, and saved connections |
+| `app/src/main/java/com/phnem/vap/cast/` | Remote playback and DLNA |
+| `app/src/main/java/com/phnem/vap/ai/` | Models, Whisper, translation, and Smart Sync |
+| `app/src/main/java/com/phnem/vap/ui/` | Compose UI, themes, and animations |
+| `app/src/main/cpp/` | JNI and native build configuration |
+| `app/src/cast/`, `app/src/nocast/` | Implementations with and without Google Cast |
+| `docs/`, `tools/` | Technical reports, build instructions, and verification tools |
 
-## Документация и участие
+## Documentation and contributing
 
-- [Навигация по технической документации](docs/README.md)
-- [История версий](CHANGELOG.md)
-- [Как предложить изменение или сообщить об ошибке](CONTRIBUTING.md)
-- [Ошибки и предложения](https://github.com/Phnem/VAP/issues)
+- [Technical documentation index](docs/README.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing and reporting bugs](CONTRIBUTING.md)
+- [Issues and feature requests](https://github.com/Phnem/VAP/issues)
 
-## Лицензия
+## License
 
-Собственный код VAP распространяется под [MIT](LICENSE). В проекте сохранены уведомления для частей Vetro Collection и сторонних зависимостей. Их лицензии перечислены в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); полные тексты находятся в assets APK. Google Cast SDK входит только в вариант `cast` и имеет отдельные условия использования.
+VAP's own code is available under the [MIT License](LICENSE). Copyright and license notices for components from Vetro Collection and third-party dependencies are preserved. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); full dependency license texts are included in the APK's assets. The Google Cast SDK is included only in the `cast` variant and has separate terms.

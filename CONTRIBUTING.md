@@ -1,19 +1,19 @@
-# Участие в VAP
+# Contributing to VAP
 
-Ошибки и предложения принимаются в [GitHub Issues](https://github.com/Phnem/VAP/issues), изменения кода — через pull request.
+Report bugs and suggest features through [GitHub Issues](https://github.com/Phnem/VAP/issues). Code contributions are welcome as pull requests.
 
-## Сообщение об ошибке
+## Reporting a bug
 
-Укажите версию VAP и вариант (`foss`/`cast`), модель устройства, версию Android, шаги воспроизведения, ожидаемый и фактический результат. Для проблем с видео полезны контейнер, кодеки и короткий пример, который можно легально распространять. Для сетевого источника укажите протокол и версию сервера. Удалите пароли, токены и личные данные из логов.
+Include the VAP version and variant (`foss` or `cast`), device model, Android version, reproduction steps, and expected and actual behavior. For playback issues, include the container and codecs, plus a short sample you have permission to share. For network sources, include the protocol and server version. Remove passwords, tokens, and personal information from logs.
 
-## Изменения кода
+## Contributing code
 
-1. Подготовьте окружение по [README](README.md#сборка-из-исходников).
-2. Создайте ветку и внесите изменение в рамках одной задачи.
-3. Для изменений логики добавьте подходящую проверку, обновите обе локализации интерфейса, если затронуты строки, и сохраните уведомления о лицензиях.
-4. Запустите JVM-тесты и lint обоих вариантов. Изменения воспроизведения и JNI проверьте на тестовом устройстве, указав в PR, что именно проверено.
-5. В PR опишите проблему, новое поведение и результаты проверок. Для изменений интерфейса приложите скриншоты.
+1. Set up the environment described in the [README](README.md#build-from-source).
+2. Create a branch and keep the change focused on one task.
+3. Add appropriate checks for logic changes, update both UI translations when changing strings, and preserve license notices.
+4. Run JVM tests and lint for both variants. Test playback and JNI changes on a test device, and describe what you verified in the PR.
+5. Explain the problem, resulting behavior, and validation in your PR. Include screenshots for UI changes.
 
-Для правок документации сборка APK не обязательна. Не добавляйте сгенерированные файлы, ключи подписи, учётные данные, веса моделей и личные медиафайлы.
+Documentation-only changes do not require an APK build. Keep generated files, signing keys, credentials, model weights, and personal media out of Git.
 
-Собственный код проекта лицензирован под MIT; сохраняйте отдельные лицензии сторонних компонентов.
+The project's own code is licensed under MIT. Preserve the separate licenses of third-party components.

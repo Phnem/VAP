@@ -1,17 +1,17 @@
-# История версий
+# Changelog
 
 ## v0.1-Stable — 2026-10-24
 
-Первый публичный релиз **VAP — Vetro Android Player**: плеер Vetro Collection как отдельное Android-приложение семейства Vetro.
+The first public release of **VAP — Vetro Android Player**: the player from Vetro Collection as a standalone Android app in the Vetro family.
 
-- Локальная видеобиблиотека с папками, превью, поиском, избранным и плейлистами.
-- Воспроизведение на Media3, сохранение прогресса, управление дорожками и режим «картинка в картинке».
-- Стилизованные и двойные субтитры, редактирование и экспорт текста.
-- Сетевые файлы, Jellyfin, Emby, Plex и DLNA.
-- Создание субтитров через Whisper, локальный перевод EN/RU и Smart Sync.
-- Два варианта: `foss` без Google Cast SDK и `cast` с Google Cast.
-- Подписанные универсальные APK для четырёх ABI, Android 8.0+.
-- Версия `v0.1-Stable` в метаданных приложения и меню библиотеки; `versionCode = 2` для обновления с локальной Alpha-сборки.
-- README, MIT License, уведомления о зависимостях и инструкции по сборке.
+- Local video library with folders, thumbnails, search, favorites, and playlists.
+- Media3 playback, saved progress, track controls, and picture-in-picture.
+- Styled and dual subtitles, text editing, and export.
+- Network files, Jellyfin, Emby, Plex, and DLNA.
+- Whisper subtitle generation, local EN/RU translation, and Smart Sync.
+- Two variants: `foss` without the Google Cast SDK and `cast` with Google Cast.
+- Signed universal APKs for four ABIs, supporting Android 8.0+.
+- `v0.1-Stable` shown in app metadata and the library menu; `versionCode = 2` allows updates from the local Alpha build.
+- README, MIT License, third-party notices, and build instructions.
 
-Ограничения описаны в [README](README.md#что-учитывать) и технических отчётах в `docs/`.
+See the [README](README.md#limitations-and-requirements) and technical reports in `docs/` for limitations.
