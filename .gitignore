@@ -27,7 +27,7 @@ Thumbs.db
 *~
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
-/graft/
+graft/
 
 # Local release-signing credentials (passwords).
 /keystore.properties
@@ -49,7 +49,7 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
-/graphify-out/
+graphify-out/
 .vscode/
 *.log
 Desktop.ini
