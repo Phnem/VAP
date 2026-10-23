@@ -1,0 +1,102 @@
+package com.phnem.vap.player.ui
+
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+/**
+ * Арифметика жестов плеера — без Compose и без Android, чтобы её можно было покрыть обычным тестом.
+ *
+ * Геометрия свободного масштаба находится в VideoGeometry.kt.
+ */
+
+/** Порог, после которого ось драга считается выбранной (см. [dominantDragAxis]). */
+const val DRAG_AXIS_THRESHOLD_DP = 12f
+
+/**
+ * Задержка перед тем, как однопальцевые жесты снова начнут слушаться после того, как палец с
+ * pinch'а отпущен.
+ *
+ * Без неё завершение pinch'а почти всегда триггерит seek: пальцы отрываются не одновременно, и
+ * оставшийся указатель успевает проехать десяток пикселей уже как «драг».
+ */
+const val POST_PINCH_LOCK_MS = 180L
+
+/**
+ * Скорость на время удержания пальца ([isSpeedHoldZone]). Абсолютная, а не множитель к текущей:
+ * пользователь просил «переходит на 2x», и от выбранной в меню 1.5× жест должен давать те же 2×,
+ * что от единицы.
+ */
+const val HOLD_SPEED = 2f
+
+/** Ось, вдоль которой залочен текущий однопальцевый драг. */
+enum class DragAxis { Undecided, Horizontal, Vertical }
+
+/** Что регулирует вертикальный свайп — зависит от половины экрана, где он начат. */
+enum class VerticalZone { Brightness, Volume }
+
+/**
+ * Выбирает доминирующую ось драга — но только после того, как палец прошёл [thresholdPx].
+ *
+ * До порога возвращает [DragAxis.Undecided]: на первых пикселях дрожание руки назначило бы ось
+ * случайно, и палец, начавший перемотку, соскальзывал бы в яркость.
+ */
+fun dominantDragAxis(dx: Float, dy: Float, thresholdPx: Float): DragAxis {
+    if (abs(dx) < thresholdPx && abs(dy) < thresholdPx) return DragAxis.Undecided
+    return if (abs(dx) >= abs(dy)) DragAxis.Horizontal else DragAxis.Vertical
+}
+
+/**
+ * Та ли это половина экрана, где удержание ускоряет воспроизведение.
+ *
+ * Правая — та же, что у перемотки вперёд дабл-тапом: жест «пропустить скучное» логично держать с
+ * той стороны, куда и так двигают время. Нулевая ширина (первый кадр) зоной не считается — иначе
+ * касание по левому краю сработало бы как правое.
+ */
+fun isSpeedHoldZone(x: Float, containerWidth: Float): Boolean =
+    containerWidth > 0f && x > containerWidth / 2f
+
+/** Левая половина экрана — яркость, правая — громкость. */
+fun verticalZoneAt(x: Float, containerWidth: Float): VerticalZone =
+    if (containerWidth > 0f && x > containerWidth / 2f) VerticalZone.Volume else VerticalZone.Brightness
+
+/**
+ * Высота мёртвой зоны у верхней кромки кадра, в которой вертикальный свайп не трогает уровни.
+ *
+ * Оттуда тянут системную шторку, и мимо неё промахиваются постоянно: в иммерсивном режиме первый
+ * свайп сверху шторку только проявляет, а палец к этому моменту уже уехал вниз — жест целиком
+ * доставался плееру и выкручивал громкость вместо того, чтобы открыть уведомления. Перемотки это
+ * не касается: она горизонтальная и со шторкой не спорит.
+ */
+const val LEVEL_DEAD_ZONE_TOP_DP = 56f
+
+/** Начат ли жест в мёртвой зоне у верхней кромки — см. [LEVEL_DEAD_ZONE_TOP_DP]. */
+fun isLevelDeadZone(y: Float, deadZonePx: Float): Boolean = y < deadZonePx
+
+/**
+ * Какую долю высоты кадра надо пройти пальцем, чтобы уровень прошёл весь диапазон от 0 до 1.
+ *
+ * Меньше единицы: свайп во весь экран физически неудобен — палец упирается в края раньше, чем
+ * доводит громкость до конца, а в ландшафте высоты и вовсе мало.
+ */
+const val LEVEL_SWIPE_TRAVEL = 0.6f
+
+/**
+ * На сколько сдвинуть уровень (0..1) за вертикальный проезд [dyPx] по контейнеру высотой [heightPx].
+ *
+ * Знак переворачивается: вверх по экрану — это отрицательный `dy`, а прибавка уровня.
+ */
+fun levelDelta(dyPx: Float, heightPx: Float): Float {
+    val travel = heightPx * LEVEL_SWIPE_TRAVEL
+    return if (travel <= 0f) 0f else -dyPx / travel
+}
+
+/**
+ * Ближайшая ступень уровня 0..1 для шкалы, у которой всего [steps] делений.
+ *
+ * Системная громкость дискретна (обычно 15 ступеней), и показывать под пальцем плавный процент,
+ * которого у неё нет, — врать: плашка ехала бы, пока звук стоит на месте.
+ */
+fun quantizeLevel(level: Float, steps: Int): Float {
+    val clamped = level.coerceIn(0f, 1f)
+    return if (steps <= 0) clamped else (clamped * steps).roundToInt() / steps.toFloat()
+}

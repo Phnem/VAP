@@ -1,0 +1,55 @@
+*.iml
+.gradle/
+.idea/
+/local.properties
+/build
+/captures
+.externalNativeBuild
+.cxx
+**/build/
+**/generated/
+.kotlin/
+app/release/
+*.apk
+*.aab
+*.jks
+*.keystore
+*.p12
+*.pfx
+# Extensionless PKCS#12 signing keystore created next to the project (private key).
+/vap
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# Local release-signing credentials (passwords).
+/keystore.properties
+tools/perf/out/
+
+# Distribution files live in GitHub Releases, not in Git.
+/dist/
+*.apks
+*.idsig
+
+# Other local credentials and Python/editor caches.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+/graphify-out/
+.vscode/
+*.log
+Desktop.ini

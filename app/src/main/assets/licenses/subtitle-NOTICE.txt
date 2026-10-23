@@ -1,0 +1,18 @@
+VAP subtitle backend
+
+libass 0.17.5: ISC; libass contributors. See libass-ISC.txt.
+FreeType 2.15.0: FreeType License selected; see freetype-LICENSE.txt and freetype-FTL.txt.
+Portions of this software are copyright © 2026 The FreeType Project (www.freetype.org). All rights reserved.
+HarfBuzz 13.0.1: see harfbuzz-COPYING.txt for the applicable notices and licenses.
+FriBidi 1.0.17: GNU Lesser General Public License 2.1 or later, dynamically linked as libfribidi.so. See fribidi-LGPL.txt and fribidi-AUTHORS.txt.
+
+Corresponding upstream sources:
+https://github.com/libass/libass/tree/0.17.5
+https://download.savannah.gnu.org/releases/freetype/freetype-2.15.0.tar.xz
+https://github.com/harfbuzz/harfbuzz/releases/tag/13.0.1
+https://github.com/fribidi/fribidi/releases/tag/v1.0.17
+
+Build from source using tools/build-subtitle-native.py in the VAP source distribution.
+Pinned dependency archives and SHA256 values are recorded in tools/native/wraps.
+The FriBidi generator header check is patched to use Meson's native build compiler; the exact patch is in the build script.
+There are no restrictions on modifying these libraries, replacing them, relinking, or debugging those modifications.

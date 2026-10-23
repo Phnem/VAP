@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="vap_window_background">#FF000000</color>
+    <!-- Иконка «V-Play»: слой foreground; фон см. drawable / drawable-night/ic_launcher_background.xml -->
+    <color name="ic_launcher_mark">#FFD9C3AB</color>
+    <color name="ic_launcher_play">#FFE85002</color>
+</resources>

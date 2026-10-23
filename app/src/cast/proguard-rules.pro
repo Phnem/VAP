@@ -1,0 +1,1 @@
+-keep class com.phnem.vap.cast.cast.VapCastOptionsProvider { public <init>(); *; }

@@ -1,0 +1,4 @@
+Google Cast SDK / Google Play services Cast framework 22.3.1 and transitive Google Play services components are proprietary and included only in the cast distribution. They are not included in foss.
+Terms: https://developers.google.com/cast/docs/terms/
+Google APIs terms: https://developers.google.com/terms
+Privacy: https://policies.google.com/privacy

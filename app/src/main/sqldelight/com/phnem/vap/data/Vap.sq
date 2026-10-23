@@ -1,0 +1,135 @@
+-- Данные пользователя VAP. Время — миллисекунды эпохи. Ключ видео — URI документа SAF.
+
+CREATE TABLE history (
+    uri TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    position_ms INTEGER NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    last_played_at INTEGER NOT NULL,
+    watched INTEGER NOT NULL DEFAULT 0
+);
+
+upsertHistory:
+INSERT OR REPLACE INTO history(uri, title, position_ms, duration_ms, last_played_at, watched)
+VALUES (?, ?, ?, ?, ?, ?);
+
+allHistory:
+SELECT * FROM history ORDER BY last_played_at DESC;
+
+historyFor:
+SELECT * FROM history WHERE uri = ?;
+
+deleteHistory:
+DELETE FROM history WHERE uri = ?;
+
+clearHistory:
+DELETE FROM history;
+
+CREATE TABLE favorite (
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
+    PRIMARY KEY (kind, key)
+);
+
+allFavorites:
+SELECT kind, key FROM favorite;
+
+addFavorite:
+INSERT OR IGNORE INTO favorite(kind, key) VALUES (?, ?);
+
+removeFavorite:
+DELETE FROM favorite WHERE kind = ? AND key = ?;
+
+CREATE TABLE hidden_folder (
+    folder_id TEXT NOT NULL PRIMARY KEY
+);
+
+allHidden:
+SELECT folder_id FROM hidden_folder;
+
+hideFolder:
+INSERT OR IGNORE INTO hidden_folder(folder_id) VALUES (?);
+
+unhideFolder:
+DELETE FROM hidden_folder WHERE folder_id = ?;
+
+CREATE TABLE playlist (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE playlist_item (
+    playlist_id INTEGER NOT NULL,
+    position INTEGER NOT NULL,
+    uri TEXT NOT NULL,
+    title TEXT NOT NULL,
+    PRIMARY KEY (playlist_id, position)
+);
+
+allPlaylists:
+SELECT p.id, p.name, p.created_at, (SELECT COUNT(*) FROM playlist_item i WHERE i.playlist_id = p.id) AS item_count
+FROM playlist p ORDER BY p.created_at DESC;
+
+insertPlaylist:
+INSERT INTO playlist(name, created_at) VALUES (?, ?);
+
+lastInsertedId:
+SELECT last_insert_rowid();
+
+renamePlaylist:
+UPDATE playlist SET name = ? WHERE id = ?;
+
+deletePlaylist:
+DELETE FROM playlist WHERE id = ?;
+
+playlistItems:
+SELECT position, uri, title FROM playlist_item WHERE playlist_id = ? ORDER BY position;
+
+nextPlaylistPosition:
+SELECT COALESCE(MAX(position) + 1, 0) FROM playlist_item WHERE playlist_id = ?;
+
+addPlaylistItem:
+INSERT OR REPLACE INTO playlist_item(playlist_id, position, uri, title) VALUES (?, ?, ?, ?);
+
+removePlaylistItem:
+DELETE FROM playlist_item WHERE playlist_id = ? AND position = ?;
+
+deletePlaylistItems:
+DELETE FROM playlist_item WHERE playlist_id = ?;
+
+-- Очередь воспроизведения: один общий список.
+CREATE TABLE queue_item (
+    position INTEGER NOT NULL PRIMARY KEY,
+    uri TEXT NOT NULL,
+    title TEXT NOT NULL
+);
+
+queueItems:
+SELECT position, uri, title FROM queue_item ORDER BY position;
+
+nextQueuePosition:
+SELECT COALESCE(MAX(position) + 1, 0) FROM queue_item;
+
+addQueueItem:
+INSERT OR REPLACE INTO queue_item(position, uri, title) VALUES (?, ?, ?);
+
+removeQueueItem:
+DELETE FROM queue_item WHERE position = ?;
+
+clearQueue:
+DELETE FROM queue_item;
+
+-- Метаданные файла, считанные один раз (длительность и разрешение).
+CREATE TABLE video_meta (
+    uri TEXT NOT NULL PRIMARY KEY,
+    duration_ms INTEGER NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL
+);
+
+allMeta:
+SELECT * FROM video_meta;
+
+upsertMeta:
+INSERT OR REPLACE INTO video_meta(uri, duration_ms, width, height) VALUES (?, ?, ?, ?);

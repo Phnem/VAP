@@ -1,0 +1,19 @@
+VAP network playback uses AndroidX Media3 (Android Open Source Project), OkHttp 4.12.0 and Okio (Square), licensed under Apache License 2.0.
+Source: https://github.com/androidx/media/tree/1.11.1
+Source: https://github.com/square/okhttp/tree/parent-4.12.0
+Source: https://github.com/square/okio
+Network credential scope, WebDAV protocol and recovery tuning adapted from Vetro Collection.
+UPnP SSDP/SOAP helpers adapted from Vetro Collection DlnaProtocol and DlnaAdapter.
+SMB2/3: SMBJ 0.13.0, Copyright 2016 SMBJ Contributors, Apache License 2.0.
+SFTP: SSHJ 0.41.0, SSHJ Contributors, Apache License 2.0.
+FTP: Apache Commons Net 3.13.0, Apache Software Foundation, Apache License 2.0.
+ASN.1: ASN-One 0.6.0, Apache License 2.0.
+Cryptography: Bouncy Castle 1.84, Legion of the Bouncy Castle Inc., MIT-style license (see bouncycastle-LICENSE.txt).
+Event bus: MBassador 1.3.0, Benjamin Diedrichsen, MIT (see mbassador-MIT.txt).
+Logging API: SLF4J 2.0.17, MIT (see slf4j-api-META-INF_LICENSE.txt.txt).
+Sources: https://github.com/hierynomus/smbj/tree/v0.13.0
+https://github.com/hierynomus/sshj/tree/v0.41.0
+https://github.com/apache/commons-net/tree/rel/commons-net-3.13.0
+https://github.com/hierynomus/asn-one/tree/v0.6.0
+https://github.com/bcgit/bc-java/tree/r1rv84
+https://github.com/bennidi/mbassador/tree/1.3.0

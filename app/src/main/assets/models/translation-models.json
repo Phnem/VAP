@@ -1,0 +1,72 @@
+[
+  {
+    "id": "en-ru",
+    "files": [
+      {
+        "name": "config.json",
+        "url": "https://huggingface.co/manancode/opus-mt-en-ru-ctranslate2-android/resolve/8693481face72247976d2a7da8610ed4c75d9e83/config.json",
+        "bytes": 223,
+        "sha256": "8f6496adfc930cbfecbe8281112197705c488fab47d34b4829b06d7f478909af"
+      },
+      {
+        "name": "model.bin",
+        "url": "https://huggingface.co/manancode/opus-mt-en-ru-ctranslate2-android/resolve/8693481face72247976d2a7da8610ed4c75d9e83/model.bin",
+        "bytes": 78276475,
+        "sha256": "f5ae1da30bcb61e877c549be8fb5a434193893eb97509ccd0b954465f9a8f80c"
+      },
+      {
+        "name": "shared_vocabulary.json",
+        "url": "https://huggingface.co/manancode/opus-mt-en-ru-ctranslate2-android/resolve/8693481face72247976d2a7da8610ed4c75d9e83/shared_vocabulary.json",
+        "bytes": 2300269,
+        "sha256": "bf1812383ed402163a2ed1b553e175e7db96a54ed68b6c15566018fdf945ed99"
+      },
+      {
+        "name": "source.spm",
+        "url": "https://huggingface.co/manancode/opus-mt-en-ru-ctranslate2-android/resolve/8693481face72247976d2a7da8610ed4c75d9e83/source.spm",
+        "bytes": 802781,
+        "sha256": "16bebef1389a0b8ab452772c4e35b9e605e5713f8ac7baa71ca701394eaa086d"
+      },
+      {
+        "name": "target.spm",
+        "url": "https://huggingface.co/manancode/opus-mt-en-ru-ctranslate2-android/resolve/8693481face72247976d2a7da8610ed4c75d9e83/target.spm",
+        "bytes": 1080169,
+        "sha256": "745998e51ba5b058e38b7ac7765c25c43ed5c1c39cc92b27163b9b2e323c9d7c"
+      }
+    ]
+  },
+  {
+    "id": "ru-en",
+    "files": [
+      {
+        "name": "config.json",
+        "url": "https://huggingface.co/manancode/opus-mt-ru-en-ctranslate2-android/resolve/9f66440658d009510d9e670ae813c7452fd38234/config.json",
+        "bytes": 223,
+        "sha256": "8f6496adfc930cbfecbe8281112197705c488fab47d34b4829b06d7f478909af"
+      },
+      {
+        "name": "model.bin",
+        "url": "https://huggingface.co/manancode/opus-mt-ru-en-ctranslate2-android/resolve/9f66440658d009510d9e670ae813c7452fd38234/model.bin",
+        "bytes": 78276475,
+        "sha256": "0efde44155f1d73b07d81bae640d9cca79657c6ade8e338d0862e34c30ffeee9"
+      },
+      {
+        "name": "shared_vocabulary.json",
+        "url": "https://huggingface.co/manancode/opus-mt-ru-en-ctranslate2-android/resolve/9f66440658d009510d9e670ae813c7452fd38234/shared_vocabulary.json",
+        "bytes": 2300269,
+        "sha256": "bf1812383ed402163a2ed1b553e175e7db96a54ed68b6c15566018fdf945ed99"
+      },
+      {
+        "name": "source.spm",
+        "url": "https://huggingface.co/manancode/opus-mt-ru-en-ctranslate2-android/resolve/9f66440658d009510d9e670ae813c7452fd38234/source.spm",
+        "bytes": 1080169,
+        "sha256": "745998e51ba5b058e38b7ac7765c25c43ed5c1c39cc92b27163b9b2e323c9d7c"
+      },
+      {
+        "name": "target.spm",
+        "url": "https://huggingface.co/manancode/opus-mt-ru-en-ctranslate2-android/resolve/9f66440658d009510d9e670ae813c7452fd38234/target.spm",
+        "bytes": 802781,
+        "sha256": "16bebef1389a0b8ab452772c4e35b9e605e5713f8ac7baa71ca701394eaa086d"
+      }
+    ]
+  }
+]

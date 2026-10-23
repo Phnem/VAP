@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Совпадает с LightBackground / DarkBackground в ui/theme/Colors.kt: окно не мигает при запуске. -->
+    <color name="vap_window_background">#FFF4EFE3</color>
+    <!-- Иконка «V-Play»: слой foreground; фон см. drawable / drawable-night/ic_launcher_background.xml -->
+    <color name="ic_launcher_mark">#FF111111</color>
+    <color name="ic_launcher_play">#FFE85002</color>
+</resources>
