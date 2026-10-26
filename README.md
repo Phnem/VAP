@@ -10,22 +10,27 @@ VAP (Vetro Android Player) brings the video player from Vetro Collection into it
 
 ## Download
 
-The current release is **v0.1-Stable**. Download signed APKs from [GitHub Releases](https://github.com/Phnem/VAP/releases/latest).
+The current release is **v0.2-Stable**. Download signed APKs from [GitHub Releases](https://github.com/Phnem/VAP/releases/latest).
 
 | APK | Choose this for |
 | --- | --- |
-| **VAP-v0.1-Stable-foss.apk** | The main build without the Google Cast SDK. Includes local playback, network sources, DLNA, and AI tools. |
-| **VAP-v0.1-Stable-cast.apk** | Everything in the main build, plus Google Cast. Includes the Google Cast SDK. |
+| **VAP-v0.2-Stable-foss.apk** | The main build without the Google Cast SDK. Includes local playback, network sources, DLNA, and AI tools. |
+| **VAP-v0.2-Stable-cast.apk** | Everything in the main build, plus Google Cast. Includes the Google Cast SDK. |
 
 Both APKs are universal builds for `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`. Requires **Android 8.0 / API 26 or later**. Both variants use the package ID `com.phnem.vap` and replace each other when installed. Updating an installation signed with the same key preserves app data.
 
 Download an APK, allow installation from your browser or file manager, and open the file. On first launch, choose a language and theme, then grant access to videos. You can add more folders through the system folder picker.
 
+### Updates
+
+APKs from GitHub Releases update themselves. VAP checks for a new release at launch and every 12 hours, downloads it over several parallel connections, verifies the file size, SHA-256 checksum, and signing key, and then opens the system installer. The first time, Android asks you to allow VAP to install apps. You can also check by hand in **Settings → Check for updates**. Builds from F-Droid or your own signing key do not update themselves and keep using their store.
+
 ## Features
 
-- **Video library:** MediaStore scanning, additional Storage Access Framework (SAF) folders, directory trees, grid and list layouts, thumbnails, search, sorting, and filters.
+- **Video library:** MediaStore scanning, additional Storage Access Framework (SAF) folders, directory trees, grid and list layouts with animated switching, flat colored folders that open and close, thumbnails, forgiving search (`911` finds `9-1-1`), sorting, filters, and pull to refresh.
 - **Watch organization:** favorites, hidden folders, history, resume playback, playlists, and a playback queue.
-- **Playback:** AndroidX Media3 / ExoPlayer, gesture controls, playback speed, zoom and aspect ratio settings, track selection, background playback, and picture-in-picture.
+- **Playback:** AndroidX Media3 / ExoPlayer, gesture controls, a playback speed ruler (0.5×–3.0×), zoom and aspect ratio settings, orientation chosen from the video, track selection, background playback, picture-in-picture, and an in-app floating mini player.
+- **Updates:** built-in checks, fast resumable downloads, and signature verification for builds signed with the author's key.
 - **Audio and video tools:** processing settings, external audio tracks, audio synchronization, screenshots, and clip export tools.
 - **Subtitles:** embedded and external tracks, SRT/VTT, styled ASS/SSA through libass, two simultaneous tracks, timing offsets, text editing, and export.
 - **Network sources:** HTTP(S), HLS, DASH, SMB, WebDAV, FTP/FTPS, and SFTP; Jellyfin, Emby, Plex, and browsing DLNA sources.

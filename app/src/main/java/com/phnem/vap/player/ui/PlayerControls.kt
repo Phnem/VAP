@@ -120,9 +120,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import kotlin.math.roundToInt
 
-private enum class PlayerMenu { AUDIO, SUBTITLES, SPEED }
+private enum class PlayerMenu { AUDIO, SUBTITLES }
 
-private val SPEED_OPTIONS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 4f)
 private val Capsule = RoundedCornerShape(percent = 50)
 
 /** Сколько ждём следующий тап, прежде чем решить, что это был одиночный тап (показать контролы). */
@@ -227,6 +226,7 @@ fun PlayerControlsOverlay(
     var locked by remember { mutableStateOf(false) }
     var menuKind by remember { mutableStateOf<PlayerMenu?>(null) }
     val menuState = remember { MutableTransitionState(false) }
+    var speedOpen by remember { mutableStateOf(false) }
     var isScrubbing by remember { mutableStateOf(false) }
     var unlockHintNonce by remember { mutableStateOf(0) }
     var showUnlockHint by remember { mutableStateOf(false) }
@@ -257,8 +257,8 @@ fun PlayerControlsOverlay(
 
     LaunchedEffect(controlsVisible) { onControlsVisibleChange(controlsVisible) }
 
-    LaunchedEffect(controlsVisible, isPlaying, menuKind, isScrubbing, locked, seekPreview, modalOpen) {
-        if (controlsVisible && isPlaying && menuKind == null && !isScrubbing && !locked && seekPreview == null && !modalOpen) {
+    LaunchedEffect(controlsVisible, isPlaying, menuKind, isScrubbing, locked, seekPreview, modalOpen, speedOpen) {
+        if (controlsVisible && isPlaying && menuKind == null && !isScrubbing && !locked && seekPreview == null && !modalOpen && !speedOpen) {
             delay(3500)
             controlsVisible = false
         }
@@ -633,7 +633,8 @@ fun PlayerControlsOverlay(
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TransportIcon(
-                            painterResource(R.drawable.ic_player_back), 40.dp, 24.dp,
+                            // Стрелка вниз: плеер сворачивается в мини-окно библиотеки, звук и кадр продолжаются.
+                            painterResource(R.drawable.ic_vap_chevron_down), 40.dp, 28.dp,
                             tint = Color.White, onClick = onBack,
                         )
                         // Две строки: название и, если есть, серия/сезон под ним.
@@ -708,7 +709,7 @@ fun PlayerControlsOverlay(
                         contentDescription = if (playerIsRu()) "Скорость" else "Speed",
                         tint = Color.White,
                         iconSize = TOP_DOCK_ICON,
-                        onClick = { menuKind = PlayerMenu.SPEED; menuState.targetState = true },
+                        onClick = { speedOpen = true },
                     )
                 }
             }
@@ -858,14 +859,13 @@ fun PlayerControlsOverlay(
                 menu = kind,
                 audioTracks = audioTracks,
                 subtitleOptions = subtitleOptions,
-                speed = speed,
-                onSelectSpeed = { onSelectSpeed(it); menuState.targetState = false },
                 onSelectAudio = { onSelectAudio(it); menuState.targetState = false },
                 // Раздел меню и настройки (язык, загрузка модели) меню не закрывают.
                 onSelectSubtitle = { onSelectSubtitle(it); if (!it.keepsMenuOpen) menuState.targetState = false },
                 onDismiss = { menuState.targetState = false },
             )
         }
+        if (speedOpen) SpeedSheet(speed = speed, onSelect = onSelectSpeed, onDismiss = { speedOpen = false })
     }
 }
 
@@ -1188,8 +1188,6 @@ private fun OptionMenu(
     menu: PlayerMenu,
     audioTracks: List<AudioTrackOption>,
     subtitleOptions: List<SubtitleOption>,
-    speed: Float,
-    onSelectSpeed: (Float) -> Unit,
     onSelectAudio: (AudioTrackOption) -> Unit,
     onSelectSubtitle: (SubtitleOption) -> Unit,
     onDismiss: () -> Unit,
@@ -1199,14 +1197,10 @@ private fun OptionMenu(
     val labels = when (menu) {
         PlayerMenu.AUDIO -> audioTracks.map { it.label }
         PlayerMenu.SUBTITLES -> subtitleOptions.map { it.label }
-        PlayerMenu.SPEED -> SPEED_OPTIONS.map { s ->
-            if (s == 1f) (if (playerIsRu()) "Обычная (1×)" else "Normal (1×)") else "${trimSpeed(s)}×"
-        }
     }
     val selectedIndex = when (menu) {
         PlayerMenu.AUDIO -> audioTracks.indexOfFirst { it.isSelected }.coerceAtLeast(0)
         PlayerMenu.SUBTITLES -> subtitleOptions.indexOfFirst { it.isSelected }.coerceAtLeast(0)
-        PlayerMenu.SPEED -> SPEED_OPTIONS.indexOfFirst { it == speed }.coerceAtLeast(0)
     }
     /** true — после выбора меню закрывается. */
     fun commit(index: Int): Boolean {
@@ -1218,7 +1212,6 @@ private fun OptionMenu(
         when (menu) {
             PlayerMenu.AUDIO -> audioTracks.getOrNull(index)?.let(onSelectAudio)
             PlayerMenu.SUBTITLES -> Unit
-            PlayerMenu.SPEED -> SPEED_OPTIONS.getOrNull(index)?.let(onSelectSpeed)
         }
         return true
     }
@@ -1275,12 +1268,6 @@ private fun OptionMenu(
                             }
                             PlayerMenu.SUBTITLES -> subtitleOptions.forEach { opt ->
                                 MenuPill(opt.label, opt.isSelected) { onSelectSubtitle(opt) }
-                            }
-                            PlayerMenu.SPEED -> SPEED_OPTIONS.forEach { s ->
-                                MenuPill(
-                                    label = if (s == 1f) (if (playerIsRu()) "Обычная (1×)" else "Normal (1×)") else "${trimSpeed(s)}×",
-                                    selected = s == speed,
-                                ) { onSelectSpeed(s) }
                             }
                         }
                     }
@@ -1621,9 +1608,6 @@ private fun formatTime(ms: Long): String {
     return if (h > 0) String.format(Locale.US, "%d:%02d:%02d", h, m, s)
     else String.format(Locale.US, "%02d:%02d", m, s)
 }
-
-private fun trimSpeed(s: Float): String =
-    if (s % 1f == 0f) s.toInt().toString() else s.toString().trimEnd('0').trimEnd('.')
 
 /**
  * Общая форма боковых кнопок и пунктов меню плеера: капсула без заливки с белым кантом — тот же

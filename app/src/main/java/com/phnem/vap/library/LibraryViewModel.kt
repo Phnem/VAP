@@ -326,7 +326,18 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
             val ordered = SeriesGrouping.group(shown) { it.name }.flatMap { it.files }
             // Подписи размера первых карточек считаются здесь, а не при их первой отрисовке на главном потоке.
             ByteSizeText.warm(app, ordered.take(VISIBLE_CARDS))
-            ordered.take(3)
+            val children = if (s.settings.treeMode) {
+                LibraryProjector.childFolders(folder, s.data, s.settings.filter, s.settings.folderSort, s.query)
+            } else {
+                emptyList()
+            }
+            if (children.isEmpty()) {
+                ordered.take(3)
+            } else {
+                // Режим дерева: экран папки начинается со вложенных папок, листы садятся в них. Картинка
+                // листа остаётся той, что лежит на карточке, чтобы кадр не менялся в момент отрыва.
+                cardSheets(folder).take(minOf(3, children.size + ordered.size))
+            }
         }
     }
 
@@ -357,6 +368,10 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     fun rememberSession(items: List<PlayableItem>) = io { trees.saveSession(items) }
+
+    /** Известно ли по сохранённым метаданным, что видео вертикальное (плеер откроется сразу вертикально). */
+    fun isPortrait(uri: String?): Boolean =
+        uri != null && state.value.data.meta[uri]?.let { it.height > it.width } == true
 
     /** Элементы плейлиста или очереди в форме для плеера. */
     fun toPlayable(entries: List<QueueEntry>): List<PlayableItem> = entries.map { PlayableItem(it.uri, it.title) }

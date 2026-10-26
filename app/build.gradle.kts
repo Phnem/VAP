@@ -24,8 +24,11 @@ android {
         applicationId = "com.phnem.vap"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "v0.1-Stable"
+        versionCode = 3
+        versionName = "v0.2-Stable"
+        // Откуда встроенное обновление берёт релизы.
+        buildConfigField("String", "GITHUB_OWNER", "\"Phnem\"")
+        buildConfigField("String", "GITHUB_REPO", "\"VAP\"")
         testInstrumentationRunner = if (providers.gradleProperty("vapSmokeRunner").orNull == "true") "com.phnem.vap.ReleaseSmokeInstrumentation" else "com.phnem.vap.PlaybackDeviceTest"
         ndk { abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86") }
         externalNativeBuild { cmake {
@@ -151,6 +154,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
 
+    implementation(libs.work.runtime.ktx)
     testImplementation(libs.junit)
+    // В JVM-тестах org.json из android.jar — заглушка; настоящий нужен разбору ответа GitHub.
+    testImplementation("org.json:json:20240303")
     testImplementation(libs.sqldelight.sqlite.driver)
 }

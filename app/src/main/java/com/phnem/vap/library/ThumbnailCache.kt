@@ -303,10 +303,14 @@ object ThumbnailCache {
                 try {
                     retriever.setDataSource(context, uri)
                     fun num(key: Int) = retriever.extractMetadata(key)?.toLongOrNull() ?: 0L
+                    // Кадр снятого на телефон вертикального видео лежит горизонтально с меткой поворота 90°/270°.
+                    val turned = num(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION).toInt().let { it == 90 || it == 270 }
+                    val width = num(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH).toInt()
+                    val height = num(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT).toInt()
                     FileMeta(
                         durationMs = num(MediaMetadataRetriever.METADATA_KEY_DURATION),
-                        width = num(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH).toInt(),
-                        height = num(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT).toInt(),
+                        width = if (turned) height else width,
+                        height = if (turned) width else height,
                     )
                 } finally {
                     runCatching { retriever.release() }

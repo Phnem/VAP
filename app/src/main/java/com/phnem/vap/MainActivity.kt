@@ -10,6 +10,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.phnem.vap.ui.update.UpdateSheet
+import com.phnem.vap.update.AppUpdateScheduler
+import com.phnem.vap.update.UpdateRuntime
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,9 +52,20 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Встроенное обновление: проверка релиза при запуске и периодическая фоновая (только для сборки, подписанной ключом автора).
+        val updates = UpdateRuntime.get(this)
+        AppUpdateScheduler.sync(this, updates.manager.mode)
+        updates.manager.refreshInBackground()
         setContent {
             var theme by remember { mutableStateOf(appPrefs.theme) }
             var firstRun by remember { mutableStateOf(!appPrefs.firstRunDone) }
+            // Окно обновления при запуске: показывается, когда пользователю есть что сделать, и держится, пока
+            // с релизом что-то происходит (иначе оно пропадало бы в момент нажатия «Обновить»).
+            val updateOffer by updates.manager.startupOffer.collectAsStateWithLifecycle(initialValue = false)
+            val updateKeep by updates.manager.startupOfferKeep.collectAsStateWithLifecycle(initialValue = false)
+            var showUpdate by remember { mutableStateOf(false) }
+            LaunchedEffect(updateOffer, firstRun) { if (updateOffer && !firstRun) showUpdate = true }
+            LaunchedEffect(updateKeep) { if (!updateKeep) showUpdate = false }
             val dark = theme.isDark(isSystemInDarkTheme())
             // Значки системных панелей следуют теме приложения, а не системы: тёмная тема на светлой системе иначе даёт тёмные значки на тёмном.
             DisposableEffect(dark) {
@@ -59,10 +75,15 @@ class MainActivity : ComponentActivity() {
             }
             VapTheme(darkTheme = dark) {
                 LibraryRoot(
-                    onPlay = { items, index -> startActivity(PlayerActivity.intent(this, items, index)) },
+                    onPlay = { items, index ->
+                        startActivity(PlayerActivity.intent(this, items, index, portraitHint = library.isPortrait(items.getOrNull(index)?.uri)))
+                    },
                     onRequestVideoAccess = ::requestVideoAccess,
+                    theme = theme,
+                    onTheme = { theme = it; appPrefs.theme = it },
                     viewModel = library,
                 )
+                if (showUpdate) UpdateSheet(manual = false, onDismiss = { showUpdate = false })
                 // Первый запуск: язык и тема, пока в фоне готовятся превью библиотеки.
                 if (firstRun) {
                     FirstRunScreen(
@@ -80,7 +101,15 @@ class MainActivity : ComponentActivity() {
             permissionRequest.launch(VideoPermissions.requested())
         }
     }
-    override fun onStart() { super.onStart(); library.startObserving() }
+    private var startedOnce = false
+
+    override fun onStart() {
+        super.onStart()
+        library.startObserving()
+        // Возврат из фона: релиз мог выйти, пока приложение лежало в памяти. Первый запуск проверил его в onCreate.
+        if (startedOnce) UpdateRuntime.get(this).manager.refreshInBackground()
+        startedOnce = true
+    }
     override fun onResume() { super.onResume(); library.startObserving(); library.rescan() }
     override fun onStop() { library.stopObserving(); super.onStop() }
 }

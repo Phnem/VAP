@@ -55,25 +55,33 @@ class PlayerActivity : ComponentActivity(), PipHostActivity {
                 pendingOpen = null
             }.onFailure {
                 android.util.Log.e("VapPlayback", "Cannot connect to playback", it)
-                finish()
+                leavePlayer(showLibrary = true)
             }
         }, androidx.core.content.ContextCompat.getMainExecutor(this))
+        // Видео вертикальное — открываем сразу вертикально, а не после поворота из альбомной (подсказка из библиотеки).
+        if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_PORTRAIT_HINT, false)) {
+            requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        }
         setContent {
+            // Язык подписей плеера — язык приложения (атрибут контекста уже подменён [AppLocale]), а не системы.
+            val russian = androidx.compose.ui.platform.LocalConfiguration.current.locales[0].language == "ru"
+            androidx.compose.runtime.CompositionLocalProvider(com.phnem.vap.player.ui.LocalPlayerRussian provides russian) {
             VapTheme(darkTheme = true) {
-                BackHandler { closePlayer() }
+                BackHandler { leavePlayer(showLibrary = true) }
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
                     val connected = player
                     if (connected != null) PlayerScreen(
                         exoPlayer = connected,
                         isInPip = pipState.value,
                         onEnterPip = { pipActions.enterPip() },
-                        onBack = { closePlayer() },
-                        onLibrary = {
-                            startActivity(Intent(this@PlayerActivity, com.phnem.vap.MainActivity::class.java)
-                                .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
-                        },
+                        // «Свернуть»: воспроизведение продолжается в мини-окне библиотеки (остановка — крестик на нём).
+                        onBack = { leavePlayer(showLibrary = true) },
+                        // Звук остаётся в сервисе. Раньше библиотека поднималась НАД плеером, и следующий запуск
+                        // видео (CLEAR_TOP) закрывал её: плеер оставался один, и «назад» закрывало приложение.
+                        onLibrary = { leavePlayer(showLibrary = true) },
                     )
                 }
+            }
             }
         }
     }
@@ -87,7 +95,7 @@ class PlayerActivity : ComponentActivity(), PipHostActivity {
     private fun open(request: Intent) {
         val connected = player ?: return
         if (request.action == PlaybackService.ACTION_RESUME) {
-            if (connected.mediaItemCount == 0) finish()
+            if (connected.mediaItemCount == 0) leavePlayer(showLibrary = true)
             else if (connected.playbackState == androidx.media3.common.Player.STATE_IDLE) connected.prepare()
             return
         }
@@ -100,7 +108,7 @@ class PlayerActivity : ComponentActivity(), PipHostActivity {
         val items = if (!uris.isNullOrEmpty()) uris.mapIndexed { index, uri ->
             PlayableItem(uri, titles.getOrNull(index).orEmpty(), types.getOrNull(index)?.takeIf { it in NETWORK_MIMES }, com.phnem.vap.network.ServerPlaybackRef.parse(refs.getOrNull(index)), starts?.getOrNull(index)?.coerceAtLeast(0) ?: 0)
         } else request.data?.let { listOf(PlayableItem(it.toString(), it.lastPathSegment.orEmpty(), request.type?.takeIf { type -> type in NETWORK_MIMES })) }.orEmpty()
-        if (items.isEmpty()) { finish(); return }
+        if (items.isEmpty()) { leavePlayer(showLibrary = true); return }
         val index = request.getIntExtra(EXTRA_START_INDEX, 0).coerceIn(items.indices)
         val position = if (items[index].server != null) items[index].startPositionMs else VapData.history(this).resumePosition(items[index].uri)
         connected.setMediaItems(items.map { it.toMediaItem() }, index, position)
@@ -108,21 +116,32 @@ class PlayerActivity : ComponentActivity(), PipHostActivity {
         connected.play()
     }
 
-    private fun closePlayer() {
+    /** Закрыть плеер: пауза и возврат в библиотеку. [showLibrary] false — окно уже закрыто системой (PiP). */
+    private fun closePlayer(showLibrary: Boolean = true) {
         player?.pause()
+        leavePlayer(showLibrary)
+    }
+
+    /**
+     * Уход с экрана плеера. Если плеер — корень задачи (его открыли из уведомления, когда библиотека уже
+     * закрыта, или запуск видео вытеснил библиотеку), простое `finish()` закрыло бы всё приложение:
+     * поэтому сначала поднимаем библиотеку.
+     */
+    private fun leavePlayer(showLibrary: Boolean) {
+        if (showLibrary && isTaskRoot) startActivity(Intent(this, com.phnem.vap.MainActivity::class.java))
         finish()
     }
 
     override fun onStop() {
         super.onStop()
-        if (wasInPip && !isInPictureInPictureMode && !isChangingConfigurations && !isFinishing) closePlayer()
+        if (wasInPip && !isInPictureInPictureMode && !isChangingConfigurations && !isFinishing) closePlayer(showLibrary = false)
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         pipState.value = isInPictureInPictureMode
         if (isInPictureInPictureMode) wasInPip = true
-        if (pipWindowWasClosed(isInPictureInPictureMode)) closePlayer()
+        if (pipWindowWasClosed(isInPictureInPictureMode)) closePlayer(showLibrary = false)
         else if (!isInPictureInPictureMode) wasInPip = false
     }
 
@@ -141,9 +160,11 @@ class PlayerActivity : ComponentActivity(), PipHostActivity {
         private const val EXTRA_REQUEST_TOKEN = "request_token"
         private val requestToken = java.util.UUID.randomUUID().toString()
         private const val EXTRA_START_INDEX = "start_index"
+        private const val EXTRA_PORTRAIT_HINT = "portrait_hint"
         private val NETWORK_MIMES = setOf("application/x-mpegURL", "application/x-mpegurl", "application/vnd.apple.mpegurl", "application/dash+xml", "video/mp4", "video/webm", "video/x-matroska", "video/mp2t")
 
-        fun intent(context: Context, items: List<PlayableItem>, startIndex: Int): Intent =
+        /** [portraitHint] — известно, что стартовое видео вертикальное: окно сразу открывается вертикально. */
+        fun intent(context: Context, items: List<PlayableItem>, startIndex: Int, portraitHint: Boolean = false): Intent =
             Intent(context, PlayerActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 .putStringArrayListExtra(EXTRA_URIS, ArrayList(items.map { it.uri }))
@@ -153,5 +174,6 @@ class PlayerActivity : ComponentActivity(), PipHostActivity {
                 .putExtra(EXTRA_POSITIONS, items.map { it.startPositionMs }.toLongArray())
                 .putExtra(EXTRA_REQUEST_TOKEN, requestToken)
                 .putExtra(EXTRA_START_INDEX, startIndex)
+                .putExtra(EXTRA_PORTRAIT_HINT, portraitHint)
     }
 }

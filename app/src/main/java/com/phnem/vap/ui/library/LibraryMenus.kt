@@ -70,6 +70,8 @@ sealed interface Overlay {
     data class FileMenu(val file: VideoFile) : Overlay
     data object ScopeMenu : Overlay
     data object NetworkSources : Overlay
+    data object Settings : Overlay
+    data object Update : Overlay
     data class SortMenu(val forFiles: Boolean) : Overlay
     data class PlaylistPicker(val files: List<VideoFile>) : Overlay
     data class NewPlaylist(val files: List<VideoFile>) : Overlay

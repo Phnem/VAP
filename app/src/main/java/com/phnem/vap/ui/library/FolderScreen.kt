@@ -1,6 +1,7 @@
 package com.phnem.vap.ui.library
 
 import android.graphics.Bitmap
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -71,6 +72,7 @@ import com.phnem.vap.library.VideoFile
 import com.phnem.vap.library.VideoFolder
 import com.phnem.vap.library.WatchInfo
 import com.phnem.vap.player.model.PlayableItem
+import com.phnem.vap.ui.components.pulltorefresh.PullRefreshHost
 import com.phnem.vap.ui.theme.SnProFamily
 import java.util.Locale
 
@@ -86,7 +88,8 @@ private sealed interface Entry {
         override val key get() = "s:$season"
     }
 
-    data class Child(val folder: VideoFolder) : Entry {
+    /** [slot] — номер цели морфа, если на эту папку садится лист с главного экрана (режим дерева). */
+    data class Child(val folder: VideoFolder, val slot: Int?) : Entry {
         override val key get() = "c:${folder.id}"
     }
 
@@ -108,6 +111,7 @@ fun FolderScreen(
     morph: FolderMorph,
     cardSheets: (VideoFolder) -> List<VideoFile>,
     onBack: () -> Unit,
+    onRescan: () -> Unit,
     onOpenChild: (VideoFolder) -> Unit,
     onFolderMenu: (VideoFolder) -> Unit,
     onFileMenu: (VideoFile) -> Unit,
@@ -148,9 +152,10 @@ fun FolderScreen(
         }
     }
     val sections = remember(files) { traced("VAP.fs.sections") { SeriesGrouping.group(files) { it.name } } }
-    val entries = remember(children, sections) {
+    val entries = remember(children, sections, isRoot) {
         traced("VAP.fs.entries") { buildList {
-            children.forEach { add(Entry.Child(it)) }
+            // Листы с карточки открытой папки садятся в её первые три элемента: вложенные папки идут первыми.
+            children.forEachIndexed { index, child -> add(Entry.Child(child, index.takeIf { isRoot && it < MAX_SHEETS })) }
             var displayIndex = 0
             val titled = sections.size > 1 || sections.firstOrNull()?.season != null
             sections.forEach { section ->
@@ -165,8 +170,7 @@ fun FolderScreen(
     fun Header() {
         ScreenHeader(
             title = folder.name,
-            scanning = false,
-            onRescan = null,
+            onSettings = null,
             leading = {
                 Box(
                     Modifier
@@ -188,12 +192,12 @@ fun FolderScreen(
     }
 
     @Composable
-    fun Item(entry: Entry, cardWidth: Dp) {
+    fun Item(entry: Entry, cardWidth: Dp, grid: Boolean) {
         when (entry) {
             is Entry.Season -> SeasonHeader(entry.season)
             is Entry.Child -> {
                 val c = entry.folder
-                if (settings.grid) {
+                if (grid) {
                     FolderCard(
                         folder = c,
                         sheets = state.cardSheets[c.id] ?: cardSheets(c),
@@ -202,17 +206,27 @@ fun FolderScreen(
                         cardWidth = cardWidth,
                         onClick = { onOpenChild(c) },
                         onLongClick = { onFolderMenu(c) },
+                        targetSlot = entry.slot,
                     )
                 } else {
-                    FolderRow(c, onClick = { onOpenChild(c) }, onLongClick = { onFolderMenu(c) })
+                    FolderRow(
+                        folder = c,
+                        sheets = state.cardSheets[c.id] ?: cardSheets(c),
+                        morph = morph,
+                        favorite = c.id in data.favoriteFolders,
+                        onClick = { onOpenChild(c) },
+                        onLongClick = { onFolderMenu(c) },
+                        targetSlot = entry.slot,
+                    )
                 }
             }
             is Entry.FileItem -> {
                 val file = entry.file
                 LaunchedEffect(file.key) { ensureMeta(file) }
-                val morphIndex = entry.displayIndex.takeIf { isRoot && it < MAX_SHEETS }
+                // Файлы идут после вложенных папок, поэтому их номер цели сдвинут на число папок.
+                val morphIndex = (children.size + entry.displayIndex).takeIf { isRoot && it < MAX_SHEETS }
                 val open = { onPlay(queue, queueIndex[file.key] ?: 0) }
-                if (settings.grid) {
+                if (grid) {
                     FileCard(
                         file = file,
                         meta = data.meta[file.key],
@@ -243,7 +257,10 @@ fun FolderScreen(
         val columns = maxOf(2, ((maxWidth - ScreenInset) / (160.dp + GridGap)).toInt())
         val padding = PaddingValues(start = ScreenInset, end = ScreenInset, bottom = LocalLibraryBottomInset.current)
         val cardWidth = gridCellWidth(maxWidth, ScreenInset, GridGap, columns)
-        if (settings.grid) {
+        // Потянуть вниз — поискать новинки: пересканирование хранилища, в нём и эта папка.
+        PullRefreshHost(isRefreshing = state.scanning, onRefresh = onRescan, modifier = Modifier.fillMaxSize()) {
+        AnimatedContent(targetState = settings.grid, transitionSpec = { viewModeTransition(toGrid = targetState) }, label = "viewMode") { grid ->
+        if (grid) {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(columns),
                 modifier = Modifier.fillMaxSize().imePadding(),
@@ -258,7 +275,7 @@ fun FolderScreen(
                     entries,
                     key = { it.key },
                     span = { if (it is Entry.Season) GridItemSpan(maxLineSpan) else GridItemSpan(1) },
-                ) { Item(it, cardWidth) }
+                ) { Item(it, cardWidth, grid = true) }
             }
         } else {
             LazyColumn(
@@ -269,8 +286,10 @@ fun FolderScreen(
                 item { Header() }
                 item { FilterChips(settings.filter, onFilter, onSortClick) }
                 if (entries.isEmpty()) item { NothingFound() }
-                items(entries, key = { it.key }) { Item(it, cardWidth) }
+                items(entries, key = { it.key }) { Item(it, cardWidth, grid = false) }
             }
+        }
+        }
         }
     }
 }

@@ -150,8 +150,20 @@ fun PlayerScreen(
         val originalOrientation = activity?.requestedOrientation
         onDispose { if (originalOrientation != null) activity.requestedOrientation = originalOrientation }
     }
-    LaunchedEffect(activity, settings.orientation, isInPip) {
-        if (!isInPip) activity?.requestedOrientation = settings.orientation.requested
+    // «По видео»: вертикальный кадр — вертикальное окно, остальные — горизонтальное. Пока размер кадра
+    // неизвестен, остаётся то, что выставила активность (горизонтальное или подсказка библиотеки).
+    val videoKnown = videoSize.width > 0 && videoSize.height > 0
+    val videoPortrait = videoKnown && videoSize.height > videoSize.width * videoSize.pixelWidthHeightRatio
+    LaunchedEffect(activity, settings.orientation, isInPip, videoKnown, videoPortrait) {
+        if (isInPip) return@LaunchedEffect
+        val mode = settings.orientation
+        if (mode == PlayerOrientation.VIDEO) {
+            if (videoKnown) activity?.requestedOrientation =
+                if (videoPortrait) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            activity?.requestedOrientation = mode.requested
+        }
     }
     var playbackFailed by remember { mutableStateOf(exoPlayer.playerError != null) }
     var itemCount by remember { mutableIntStateOf(exoPlayer.mediaItemCount) }

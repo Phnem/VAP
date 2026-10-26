@@ -19,6 +19,7 @@ smbj = "0.13.0"
 sshj = "0.41.0"
 commonsNet = "3.13.0"
 bouncycastle = "1.84"
+work = "2.10.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -50,6 +51,7 @@ smbj = { module = "com.hierynomus:smbj", version.ref = "smbj" }
 sshj = { module = "com.hierynomus:sshj", version.ref = "sshj" }
 commons-net = { module = "commons-net:commons-net", version.ref = "commonsNet" }
 bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 
 lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }

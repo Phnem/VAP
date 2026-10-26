@@ -14,6 +14,8 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -55,8 +57,12 @@ internal val PaperPoses = listOf(
 
 internal const val MAX_SHEETS = 3
 
-/** Наклон передней пластины при открытии папки (решение владельца №5), градусов. */
-internal const val PLATE_TILT_DEGREES = 14f
+/** Насколько откидывается передняя пластина открытой папки, градусов, и насколько она при этом гаснет. */
+internal const val PLATE_OPEN_DEGREES = 52f
+internal const val PLATE_OPEN_FADE = 0.12f
+
+/** Насколько откинутая пластина сплющивается по высоте: открытая папка ниже закрытой, листы видны целиком. */
+internal const val PLATE_OPEN_SQUASH = 0.34f
 
 internal fun paperColor(index: Int, dark: Boolean): Color =
     if (dark) {
@@ -67,7 +73,8 @@ internal fun paperColor(index: Int, dark: Boolean): Color =
 
 /**
  * Морф «папка открывается»: до трёх листов летят с карточки папки в первые карточки файлов,
- * передняя пластина наклоняется и гаснет. Закрытие идёт тем же путём назад.
+ * передняя пластина откидывается и гаснет. Закрытие идёт тем же путём назад, но пластина закрывается
+ * только когда листы уже вернулись в папку: иначе листы пролетали бы сквозь неё.
  *
  * Механика взята из `ShelfMorph` полок аудиокниг Vetro:
  * - один общий прогресс `0..1` и две таблицы прямоугольников `from` / `to`;
@@ -87,6 +94,12 @@ class FolderMorph {
         private set
 
     val progress = Animatable(0f)
+
+    /** Насколько откинута передняя пластина открытой папки (0 — закрыта). Двигается отдельно от полёта листов. */
+    val plate = Animatable(0f)
+
+    /** Номера целей, которые сами являются папками (режим дерева): сюда лист садится и растворяется. */
+    internal val folderTargets = HashSet<Int>()
 
     /**
      * Листы-копии рисуются только пока идёт переход. Раньше слой жил, пока папка открыта, и копии
@@ -111,8 +124,12 @@ class FolderMorph {
     fun targetHidden(index: Int): Boolean =
         open != null && progress.value < 0.999f && from.getOrNull(index) != null && to.getOrNull(index) != null
 
-    /** Прогресс для наклона пластины именно этой папки. */
-    fun plateProgress(folderId: String): Float = if (open?.id == folderId) progress.value else 0f
+    /** Прозрачность настоящей цели-папки: она проявляется под садящимся листом. */
+    fun targetAlpha(index: Int): Float =
+        if (!targetHidden(index)) 1f else ((progress.value - 0.8f) / 0.2f).coerceIn(0f, 1f)
+
+    /** Откидывание пластины именно этой папки. */
+    fun plateProgress(folderId: String): Float = if (open?.id == folderId) plate.value else 0f
 
     suspend fun expand(folder: VideoFolder, sheets: List<VideoFile>, reducedMotion: Boolean) {
         if (open != null) return
@@ -125,11 +142,16 @@ class FolderMorph {
         withFrameNanos { }
         to = sheets.indices.map { rectOf(targetCoords[it]) }
         if (reducedMotion) {
+            plate.snapTo(1f)
             progress.snapTo(1f)
         } else {
             flying = true
             try {
-                progress.animateTo(1f, MotionTokens.largeSurfaceEnter())
+                // Пластина откидывается сразу, листы вылетают из-под неё.
+                coroutineScope {
+                    launch { plate.animateTo(1f, MotionTokens.springSurface()) }
+                    progress.animateTo(1f, MotionTokens.largeSurfaceEnter())
+                }
             } finally {
                 flying = false
             }
@@ -143,12 +165,14 @@ class FolderMorph {
         from = emptyList()
         to = emptyList()
         open = folder
+        plate.snapTo(1f)
         progress.snapTo(1f)
     }
 
     /** Сброс без анимации: папка пропала при пересканировании. */
     suspend fun reset() {
         progress.snapTo(0f)
+        plate.snapTo(0f)
         flying = false
         open = null
         sheets = emptyList()
@@ -165,6 +189,7 @@ class FolderMorph {
         to = sheets.indices.map { rectOf(targetCoords[it]) }
         if (reducedMotion) {
             progress.snapTo(0f)
+            plate.snapTo(0f)
         } else {
             flying = true
             try {
@@ -172,6 +197,8 @@ class FolderMorph {
             } finally {
                 flying = false
             }
+            // Листы уже лежат в открытой папке — теперь она закрывается.
+            plate.animateTo(0f, MotionTokens.springExit())
         }
         open = null
         sheets = emptyList()
@@ -224,7 +251,12 @@ private fun FlyingPaper(index: Int, file: VideoFile, morph: FolderMorph) {
                 val placeable = measurable.measure(Constraints.fixed(w, h))
                 layout(w, h) { placeable.place(r.left.roundToInt(), r.top.roundToInt()) }
             }
-            .graphicsLayer { rotationZ = lerp(pose.rotation, 0f, morph.progress.value) }
+            .graphicsLayer {
+                val p = morph.progress.value
+                rotationZ = lerp(pose.rotation, 0f, p)
+                // Лист, садящийся в папку-цель, растворяется под её верхним листом.
+                if (index in morph.folderTargets) alpha = 1f - ((p - 0.8f) / 0.2f).coerceIn(0f, 1f)
+            }
             // Тень рисуется прямоугольниками, а не `shadowElevation`: размер листа меняется на каждом
             // кадре полёта, и Skia каждый раз заново считал маску тени на CPU и грузил её в GPU
             // (на трассе — по одной загрузке текстуры ~430x255 на тень на кадр).

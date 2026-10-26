@@ -81,7 +81,7 @@ class PlayerPreferences(context: Context) {
             prefs[PlayerSettingsKeys.HOLD_SPEED] = value.holdToSpeed
             prefs[PlayerSettingsKeys.PINCH_ZOOM] = value.pinchZoom
             prefs[PlayerSettingsKeys.FRAME_PREVIEW] = value.framePreview
-            prefs[PlayerSettingsKeys.ORIENTATION] = value.orientation.name
+            prefs[PlayerSettingsKeys.ORIENTATION_MODE] = value.orientation.name
             prefs[PlayerSettingsKeys.DECODER] = value.decoderMode.name
             prefs[PlayerSettingsKeys.HDR_OUTPUT] = value.hdrOutput.name
             prefs[PlayerSettingsKeys.MATCH_FPS] = value.matchFrameRate

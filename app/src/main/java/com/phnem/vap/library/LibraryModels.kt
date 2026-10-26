@@ -20,6 +20,9 @@ data class VideoFile(
     val episode: EpisodeInfo? by lazy(LazyThreadSafetyMode.PUBLICATION) { EpisodeParser.parse(name) }
     val nameKey: String by lazy(LazyThreadSafetyMode.PUBLICATION) { name.lowercase(java.util.Locale.getDefault()) }
 
+    /** Имя только из букв и цифр: по нему ищет поиск (`9-1-1.S01E02.mkv` → `911s01e02mkv`). */
+    val compactName: String by lazy(LazyThreadSafetyMode.PUBLICATION) { SearchTerms.compact(name) }
+
     /** Ключ превью (адрес, размер, время изменения, версия формата): считается один раз, а не на каждую карточку. */
     val thumbKey: ThumbKey by lazy(LazyThreadSafetyMode.PUBLICATION) { ThumbKey.of(this) }
 

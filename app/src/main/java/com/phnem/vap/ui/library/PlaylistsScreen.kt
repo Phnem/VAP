@@ -62,6 +62,7 @@ fun PlaylistsScreen(
     onOpen: (Long) -> Unit,
     onBack: () -> Unit,
     onTitleClick: () -> Unit,
+    onSettings: () -> Unit,
     onMenu: (Overlay) -> Unit,
     onPlay: (List<PlayableItem>, Int) -> Unit,
 ) {
@@ -73,8 +74,7 @@ fun PlaylistsScreen(
             item {
                 ScreenHeader(
                     title = stringResource(R.string.scope_playlists),
-                    scanning = false,
-                    onRescan = null,
+                    onSettings = onSettings,
                     onTitleClick = onTitleClick,
                 )
             }
@@ -152,8 +152,7 @@ fun PlaylistsScreen(
         item {
             ScreenHeader(
                 title = title,
-                scanning = false,
-                onRescan = null,
+                onSettings = null,
                 leading = {
                     Box(
                         Modifier

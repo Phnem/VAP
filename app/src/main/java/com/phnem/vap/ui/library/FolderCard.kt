@@ -36,20 +36,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -66,11 +69,8 @@ import com.phnem.vap.library.ThumbnailCache
 import com.phnem.vap.library.VideoFile
 import com.phnem.vap.library.VideoFolder
 import com.phnem.vap.ui.brand.VapWordmark
-import com.phnem.vap.ui.glass.FrostedMaterials
 import com.phnem.vap.ui.theme.SnProFamily
 import com.phnem.vap.ui.theme.isAppInDarkTheme
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 private val StickerWhite = Color(0xFFFFFFFF)
 
@@ -81,20 +81,16 @@ private const val CARD_ASPECT = 1.04f
 internal fun gridCellWidth(totalWidth: Dp, inset: Dp, gap: Dp, columns: Int): Dp =
     (totalWidth - inset * 2 - gap * (columns - 1)) / columns
 
-/** Доля высоты карточки, которую занимает передняя пластина. */
+/** Доля высоты папки, которую занимает передняя пластина, и задняя пластина (язычок торчит над ней). */
 private const val PLATE_HEIGHT = 0.66f
+private const val BACK_HEIGHT = 0.86f
 
 /**
- * Карточка папки (design-spec §1.1, §3.3): задняя пластина с язычком, до трёх повёрнутых «листов»
- * (кадры первых видео), матовая передняя пластина, через которую цвет листов просвечивает размытым
- * пятном, стикер справа внизу, знак VAP слева внизу, под карточкой — название и число видео.
+ * Карточка папки: плоская «открывающаяся» папка (задняя пластина, до трёх листов с кадрами видео,
+ * передняя пластина с вырезом под язычок), под ней — название и число видео. Рисунок папки — [FolderArt].
  *
- * [sheets] — файлы листов в порядке текущей сортировки. При открытии папки [morph] прячет листы
- * этой карточки (вместо них летят копии), наклоняет и гасит переднюю пластину.
- *
- * Размытое «просвечивание» листов под пластиной — готовая картинка ([FolderPlateBlur]), а не живой
- * `layerBackdrop` на каждую карточку. Живой вариант (design-spec §10, риск №1) на устройстве давал
- * 46 мс на кадр при прокрутке сетки против 12 мс теперь (Samsung SM-S936B, 120 Гц, release).
+ * Раньше передняя пластина была матовым стеклом с размытой подложкой; на телефоне это съедало кадры
+ * прокрутки сетки, поэтому пластина теперь просто залитый путь без размытия и без теней.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -107,8 +103,8 @@ fun FolderCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    targetSlot: Int? = null,
 ) {
-    val dark = isAppInDarkTheme()
     val ink = MaterialTheme.colorScheme.onBackground
     Column(
         modifier = modifier
@@ -123,147 +119,7 @@ fun FolderCard(
         // Ширину ячейки знает сетка, поэтому подкомпозиция `BoxWithConstraints` на каждую карточку
         // (она идёт в фазе измерения, при каждом появлении ячейки на экране) не нужна.
         Box(Modifier.fillMaxWidth().aspectRatio(CARD_ASPECT)) {
-            val w = cardWidth
-            val h = cardWidth / CARD_ASPECT
-            val plateShape = RoundedCornerShape(24.dp)
-            val context = LocalContext.current
-            val localDensity = LocalDensity.current
-            val density = localDensity.density
-            val material = FrostedMaterials.folder()
-            val shown = sheets.take(MAX_SHEETS)
-
-            // Кадры листов грузятся здесь, а не в самом листе: по ним же считается подложка пластины.
-            // Лист карточки — самый мелкий из трёх готовых размеров (320 px на лист около 265 px).
-            val frames = remember(shown.map { it.thumbKey.id }) {
-                mutableStateListOf<Bitmap?>().apply { shown.forEach { add(ThumbnailCache.peek(it, ThumbTier.CARD)) } }
-            }
-            shown.forEachIndexed { i, file ->
-                LaunchedEffect(frames, file.thumbKey.id) { frames[i] = ThumbnailCache.frame(context, file, ThumbTier.CARD) }
-            }
-            val loaded = frames.count { it != null }
-            val wPx = with(localDensity) { w.roundToPx() }
-            val hPx = with(localDensity) { h.roundToPx() }
-            val plateHPx = with(localDensity) { (h * PLATE_HEIGHT).roundToPx() }
-            // Размытое «просвечивание» считается один раз, а не на каждом кадре прокрутки: живое
-            // размытие на каждую карточку делало сетку неиграбельной (см. FolderPlateBlur).
-            val plateKey = FolderPlateBlur.key(folder.id, dark, wPx, hPx, shown.map { it.thumbKey.id }, frames)
-            val plateBlur by produceState(FolderPlateBlur.peek(plateKey), plateKey) {
-                if (loaded == 0 || wPx <= 0 || hPx <= 0) {
-                    value = null
-                    return@produceState
-                }
-                val snapshot = frames.toList()
-                value = withContext(Dispatchers.Default) {
-                    FolderPlateBlur.render(plateKey, snapshot, wPx, hPx, plateHPx, density, dark, material.blur.value)
-                }
-            }
-            val saturation = remember(material.saturation) {
-                ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(material.saturation) })
-            }
-
-            // Задняя пластина и листы.
-            Box(Modifier.fillMaxSize()) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(h * 0.86f)
-                        .clip(plateShape)
-                        .background(if (dark) Color(0xFF2B2B2B) else Color(0xFFE4DDC9)),
-                )
-                // Язычок задней пластины.
-                Box(
-                    Modifier
-                        .align(Alignment.TopStart)
-                        .offset(x = w * 0.06f, y = h * 0.09f)
-                        .width(w * 0.38f)
-                        .height(h * 0.12f)
-                        .clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
-                        .background(if (dark) Color(0xFF2B2B2B) else Color(0xFFE4DDC9)),
-                )
-                // Порядок рисования: левый, правый, затем средний сверху.
-                for (i in intArrayOf(1, 2, 0)) {
-                    val file = shown.getOrNull(i) ?: continue
-                    Paper(i, w, h, morph, folder.id, frames.getOrNull(i))
-                }
-            }
-
-            // Передняя матовая пластина; при открытии папки наклоняется и гаснет. Размытая подложка
-            // — готовая картинка, остальные слои стекла (тинт, кант, блик) — обычные заливки.
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(h * PLATE_HEIGHT)
-                    .graphicsLayer {
-                        val p = morph.plateProgress(folder.id)
-                        transformOrigin = TransformOrigin(0.5f, 1f)
-                        cameraDistance = 14f * density
-                        rotationX = -PLATE_TILT_DEGREES * p
-                        alpha = 1f - 0.9f * p
-                    }
-                    .then(
-                        if (dark) {
-                            Modifier
-                        } else {
-                            Modifier.shadow(
-                                elevation = 8.dp,
-                                shape = plateShape,
-                                clip = false,
-                                ambientColor = Color.Black.copy(alpha = 0.2f),
-                                spotColor = Color.Black.copy(alpha = 0.2f),
-                            )
-                        },
-                    )
-                    .clip(plateShape)
-                    .background(material.fallbackFill),
-            ) {
-                plateBlur?.let {
-                    Image(
-                        bitmap = it.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        filterQuality = FilterQuality.High,
-                        colorFilter = saturation,
-                        modifier = Modifier.matchParentSize(),
-                    )
-                }
-                Box(Modifier.matchParentSize().background(material.tint))
-                Box(Modifier.matchParentSize().border(with(localDensity) { 1f.toDp() }, material.rim, plateShape))
-                Box(
-                    Modifier.matchParentSize().border(
-                        0.75.dp,
-                        Brush.verticalGradient(listOf(Color.White.copy(alpha = if (dark) 0.5f else 0.7f), Color.Transparent)),
-                        plateShape,
-                    ),
-                )
-            }
-
-            // Подпись автора слева внизу — знак VAP (решение владельца №3).
-            VapWordmark(
-                color = ink.copy(alpha = 0.38f),
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = 14.dp)
-                    .height(11.dp),
-            )
-
-            Sticker(
-                folder = folder,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 10.dp, bottom = 10.dp)
-                    .size(w * 0.30f),
-            )
-
-            if (favorite) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_vap_star),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(20.dp),
-                )
-            }
+            FolderArt(folder, sheets, morph, cardWidth, cardWidth / CARD_ASPECT, favorite, mini = false, targetSlot = targetSlot)
         }
         Spacer(Modifier.height(8.dp))
         Row(
@@ -284,6 +140,166 @@ fun FolderCard(
             Spacer(Modifier.width(8.dp))
             CountCapsule(folder.totalCount)
         }
+    }
+}
+
+/**
+ * Плоская папка размером [w] × [h]. [mini] — уменьшенный вариант для строки списка (без знака VAP,
+ * стикера и звезды). Листы регистрируют свои координаты в [morph]: от них стартует и к ним возвращается
+ * полёт. [targetSlot] — сама эта папка цель полёта (вложенная папка в режиме дерева): сюда садится лист
+ * с этим индексом, и садится на верхний лист этой папки.
+ */
+@Composable
+internal fun FolderArt(
+    folder: VideoFolder,
+    sheets: List<VideoFile>,
+    morph: FolderMorph,
+    w: Dp,
+    h: Dp,
+    favorite: Boolean,
+    mini: Boolean,
+    targetSlot: Int?,
+    modifier: Modifier = Modifier,
+) {
+    val dark = isAppInDarkTheme()
+    val ink = MaterialTheme.colorScheme.onBackground
+    val context = LocalContext.current
+    val shown = sheets.take(MAX_SHEETS)
+
+    // Кадры листов грузятся здесь, а не в самом листе. Лист карточки — самый мелкий из трёх готовых
+    // размеров (320 px на лист около 265 px).
+    val frames = remember(shown.map { it.thumbKey.id }) {
+        mutableStateListOf<Bitmap?>().apply { shown.forEach { add(ThumbnailCache.peek(it, ThumbTier.CARD)) } }
+    }
+    shown.forEachIndexed { i, file ->
+        LaunchedEffect(frames, file.thumbKey.id) { frames[i] = ThumbnailCache.frame(context, file, ThumbTier.CARD) }
+    }
+    val colors = remember(folder.kind, folder.id, dark) { FolderPalette.of(folder, dark) }
+    // Радиусы прежней карточки (24 dp и 14 dp при ширине 160 dp) масштабируются вместе с папкой.
+    val corner = w * 0.15f
+    val tabCorner = w * 0.0875f
+
+    Box(modifier.size(w, h)) {
+        // Задняя пластина и язычок.
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(h * BACK_HEIGHT)
+                .platePaint(colors.back, colors.rim, RoundedCornerShape(corner)),
+        )
+        Box(
+            Modifier
+                .align(Alignment.TopStart)
+                .offset(x = w * 0.06f, y = h * 0.09f)
+                .width(w * 0.38f)
+                .height(h * 0.12f)
+                .platePaint(colors.back, null, RoundedCornerShape(topStart = tabCorner, topEnd = tabCorner)),
+        )
+        // Порядок рисования: левый, правый, затем средний сверху.
+        for (i in intArrayOf(1, 2, 0)) {
+            if (shown.getOrNull(i) == null) continue
+            Paper(i, w, h, morph, folder.id, frames.getOrNull(i), targetSlot, mini)
+        }
+        // Передняя пластина: при открытии папки откидывается и гаснет, листы остаются под ней.
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(h * PLATE_HEIGHT)
+                .graphicsLayer {
+                    val p = morph.plateProgress(folder.id)
+                    transformOrigin = TransformOrigin(0.5f, 1f)
+                    cameraDistance = 14f * density
+                    rotationX = -PLATE_OPEN_DEGREES * p
+                    scaleY = 1f - PLATE_OPEN_SQUASH * p
+                    alpha = 1f - PLATE_OPEN_FADE * p
+                }
+                .platePaint(colors.front, colors.rim, RoundedCornerShape(corner), colors.frontEnd),
+        )
+        if (!mini) {
+            // Подпись автора слева внизу — знак VAP (решение владельца №3).
+            VapWordmark(
+                color = colors.mark,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = 14.dp)
+                    .height(11.dp),
+            )
+            Sticker(
+                folder = folder,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 10.dp, bottom = 10.dp)
+                    .size(w * 0.30f),
+            )
+            if (favorite) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_vap_star),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(20.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Цвета одной папки: передняя пластина (градиент [front] → [frontEnd]), задняя, кант и знак VAP. */
+internal class FolderColors(val front: Color, val frontEnd: Color, val back: Color, val rim: Color, val mark: Color)
+
+/**
+ * Цвет папки. Палитра подобрана вручную: тёплые оранжевые и красные, горчичный и золотой, глубокие
+ * бордовый, сливовый, тёмно-синий, морской и лесной тона, кремовый и почти чёрный. Ни розового, ни
+ * кислотного. Известные виды (загрузки, камера, фильмы, скриншоты, документы — те, что помечены
+ * стикером) закреплены за своим цветом; остальным цвет выбирается из палитры по идентификатору папки,
+ * поэтому у папки он свой и не меняется между запусками.
+ */
+internal object FolderPalette {
+    private val Palette = listOf(
+        0xFFF44A22, 0xFFFFA649, 0xFFF7B538, 0xFFFFBE0B, 0xFFFF924F, 0xFFD0391B, 0xFFB31919, 0xFFF5735A,
+        0xFF780116, 0xFF5B011D, 0xFF251836, 0xFF14213D, 0xFF283845, 0xFF0F3F49, 0xFF0F3D3A, 0xFF00492C,
+        0xFF283618, 0xFF324E44, 0xFFF5DABF, 0xFFEFEDE5, 0xFF161616,
+    ).map { Color(it) }
+
+    private fun baseOf(folder: VideoFolder): Color = when (folder.kind) {
+        FolderKind.DOWNLOAD -> Color(0xFF0F3F49)
+        FolderKind.CAMERA -> Color(0xFFFF924F)
+        FolderKind.MOVIES -> Color(0xFFB31919)
+        FolderKind.SCREENSHOTS -> Color(0xFF00492C)
+        FolderKind.DOCUMENTS -> Color(0xFFF7B538)
+        FolderKind.GENERIC -> {
+            val raw = ((folder.id.hashCode() * 2654435761L) ushr 8).toInt() and 0x7fffffff
+            Palette[raw % Palette.size]
+        }
+    }
+
+    fun of(folder: VideoFolder, dark: Boolean): FolderColors {
+        var base = baseOf(folder)
+        val light = base.luminance() > 0.45f
+        // Очень тёмные тона на чёрном фоне темы сливались бы с ним: чуть приподнимаем.
+        if (dark && base.luminance() < 0.05f) base = lerp(base, Color.White, 0.12f)
+        return FolderColors(
+            front = lerp(base, Color.White, 0.05f),
+            frontEnd = lerp(base, Color.Black, 0.12f),
+            back = lerp(base, Color.Black, if (dark) 0.40f else 0.24f),
+            rim = if (light) Color.Black.copy(alpha = 0.10f) else Color.White.copy(alpha = if (dark) 0.14f else 0.18f),
+            mark = if (light) Color.Black.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.55f),
+        )
+    }
+}
+
+/**
+ * Заливка пластины: один цвет или градиент по диагонали ([end] != null) и тонкий кант. Без слоёв, без
+ * размытия и без теней: пластина стоит не дороже обычного скруглённого прямоугольника.
+ */
+private fun Modifier.platePaint(color: Color, rim: Color?, shape: Shape, end: Color? = null): Modifier = drawWithCache {
+    val outline = shape.createOutline(size, layoutDirection, this)
+    val brush = end?.let { Brush.linearGradient(listOf(color, it), start = Offset.Zero, end = Offset(size.width, size.height)) }
+    val stroke = Stroke(1.dp.toPx())
+    onDrawBehind {
+        if (brush != null) drawOutline(outline, brush) else drawOutline(outline, color)
+        if (rim != null) drawOutline(outline, rim, style = stroke)
     }
 }
 
@@ -308,7 +324,10 @@ fun CountCapsule(count: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** Лист: кадр видео в белой рамке; пока кадра нет — бумажная заливка, как в референсе. */
+/**
+ * Лист: кадр видео в белой рамке; пока кадра нет — бумажная заливка. Верхний лист ([targetSlot] != null)
+ * заодно цель полёта, когда эту папку открывают как вложенную.
+ */
 @Composable
 private fun BoxScope.Paper(
     index: Int,
@@ -317,31 +336,47 @@ private fun BoxScope.Paper(
     morph: FolderMorph,
     folderId: String,
     frame: Bitmap?,
+    targetSlot: Int?,
+    mini: Boolean,
 ) {
     val dark = isAppInDarkTheme()
     val pose = PaperPoses[index]
-    val shape = RoundedCornerShape(9.dp)
+    val shape = RoundedCornerShape(if (mini) 4.dp else 9.dp)
+    val slot = targetSlot.takeIf { index == 0 }
     // Карточка ушла с экрана (или пересоздана) — её LayoutCoordinates больше не нужны. Без этого реестр
     // морфа держал узлы всех когда-либо показанных карточек.
-    DisposableEffect(morph, folderId, index) {
-        onDispose { morph.paperCoords.remove("$folderId#$index") }
+    // При смене вида «сетка ↔ список» две карточки одной папки живут одновременно, и уходящая не должна
+    // стереть координаты пришедшей: убираем запись, только если она ещё наша.
+    val mine = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    DisposableEffect(morph, folderId, index, slot) {
+        if (slot != null) morph.folderTargets.add(slot)
+        onDispose {
+            if (morph.paperCoords["$folderId#$index"] === mine[0]) morph.paperCoords.remove("$folderId#$index")
+            if (slot != null && morph.targetCoords[slot] === mine[0]) {
+                morph.folderTargets.remove(slot)
+                morph.targetCoords.remove(slot)
+            }
+        }
     }
     Box(
         Modifier
             .align(Alignment.TopCenter)
-            .offset(x = w * pose.dx, y = h * (0.04f + pose.dy))
+            .offset(x = w * pose.dx, y = h * (0.035f + pose.dy))
             .width(w * 0.56f)
             .aspectRatio(16f / 10f)
             // Координаты до поворота: от них морф считает старт полёта.
-            .onPlaced { morph.paperCoords["$folderId#$index"] = it }
+            .onPlaced {
+                mine[0] = it
+                morph.paperCoords["$folderId#$index"] = it
+                if (slot != null) morph.targetCoords[slot] = it
+            }
             .graphicsLayer {
                 rotationZ = pose.rotation
-                alpha = if (morph.paperHidden(folderId)) 0f else 1f
+                alpha = if (morph.paperHidden(folderId)) 0f else if (slot != null) morph.targetAlpha(slot) else 1f
             }
-            .shadow(3.dp, shape, clip = false)
             .clip(shape)
             .background(paperColor(index, dark))
-            .border(1.5.dp, StickerWhite.copy(alpha = if (dark) 0.25f else 0.9f), shape),
+            .border(if (mini) 0.75.dp else 1.5.dp, StickerWhite.copy(alpha = if (dark) 0.25f else 0.9f), shape),
     ) {
         frame?.let {
             Image(

@@ -122,10 +122,13 @@ object LibraryProjector {
         filter: LibraryFilter,
         sort: SortSpec<FileSortKey>,
         query: String,
-    ): List<VideoFile> =
-        folder.files
-            .filter { matchesFile(it, data, filter, query) }
+    ): List<VideoFile> {
+        val terms = SearchTerms.parse(query)
+        val folderHit = !terms.isEmpty && terms.matches(SearchTerms.compact(folder.name))
+        return folder.files
+            .filter { matchesFile(it, data, filter, terms, folderHit) }
             .sortedWith(fileComparator(sort, data))
+    }
 
     /**
      * Первые [limit] файлов папки в порядке [sort] — «листы» на карточке. Свои файлы, а у папки без
@@ -183,13 +186,12 @@ object LibraryProjector {
             LibraryFilter.WATCHED -> files.isNotEmpty() && files.all { data.isWatched(it) }
         }
         if (!okFilter) return false
-        val q = query.trim().lowercase(Locale.getDefault())
-        if (q.isEmpty()) return true
-        return folder.name.lowercase(Locale.getDefault()).contains(q) ||
-            files.any { it.name.lowercase(Locale.getDefault()).contains(q) }
+        val terms = SearchTerms.parse(query)
+        if (terms.isEmpty) return true
+        return terms.matches(SearchTerms.compact(folder.name)) || files.any { terms.matches(it.compactName) }
     }
 
-    private fun matchesFile(file: VideoFile, data: LibraryData, filter: LibraryFilter, query: String): Boolean {
+    private fun matchesFile(file: VideoFile, data: LibraryData, filter: LibraryFilter, terms: SearchTerms, folderHit: Boolean): Boolean {
         val okFilter = when (filter) {
             LibraryFilter.ALL -> true
             LibraryFilter.FAVORITES -> file.uri.toString() in data.favoriteFiles
@@ -197,8 +199,8 @@ object LibraryProjector {
             LibraryFilter.WATCHED -> data.isWatched(file)
         }
         if (!okFilter) return false
-        val q = query.trim().lowercase(Locale.getDefault())
-        return q.isEmpty() || file.nameKey.contains(q)
+        // Нашлась сама папка («9-1-1») — в ней показываются все серии, а не только те, чьё имя содержит запрос.
+        return terms.isEmpty || folderHit || terms.matches(file.compactName)
     }
 
     // ——— Сортировка ———
@@ -233,6 +235,30 @@ object LibraryProjector {
             FileSortKey.DURATION -> compareBy<VideoFile> { data.meta[it.uri.toString()]?.durationMs ?: 0L }.then(byName)
         }
         return if (sort.descending) base.reversed() else base
+    }
+}
+
+/**
+ * Запрос поиска. Сравнение идёт по «сжатому» тексту: только буквы и цифры в нижнем регистре, «ё» как «е».
+ * Поэтому `911`, `9.1.1` и `9 1 1` находят `9-1-1.S01E02.mkv`, а `game thrones` — `Game.of.Thrones`:
+ * слова запроса (длиной от двух знаков) могут стоять в любом порядке и с пропусками.
+ */
+class SearchTerms private constructor(private val whole: String, private val words: List<String>) {
+    val isEmpty: Boolean get() = whole.isEmpty()
+
+    fun matches(compactText: String): Boolean =
+        compactText.contains(whole) ||
+            (words.size > 1 && words.all { it.length >= 2 && compactText.contains(it) })
+
+    companion object {
+        fun compact(text: String): String = buildString(text.length) {
+            for (ch in text) if (ch.isLetterOrDigit()) append(ch.lowercaseChar().let { if (it == 'ё') 'е' else it })
+        }
+
+        fun parse(query: String): SearchTerms {
+            val words = query.split(' ', '\t', '\n').map(::compact).filter { it.isNotEmpty() }
+            return SearchTerms(words.joinToString(""), words)
+        }
     }
 }
 

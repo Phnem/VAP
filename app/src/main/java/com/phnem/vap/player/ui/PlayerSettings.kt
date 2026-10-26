@@ -32,6 +32,9 @@ object PlayerSettingsKeys {
     val HDR_OUTPUT = stringPreferencesKey("video_hdr_output")
     val MATCH_FPS = booleanPreferencesKey("video_match_fps")
     val ORIENTATION = stringPreferencesKey("orientation")
+
+    /** Режим «По видео» стал умолчанием, поэтому выбор хранится под новым ключом: старое «Альбомная» было умолчанием, а не выбором. */
+    val ORIENTATION_MODE = stringPreferencesKey("orientation_mode")
     val FRAME_PREVIEW = booleanPreferencesKey("frame_preview")
     val AUDIO_LANGUAGE = stringPreferencesKey("audio_language")
     val PRESERVE_PITCH = booleanPreferencesKey("audio_preserve_pitch")
@@ -50,7 +53,7 @@ data class PlayerSettings(
     val decoderMode: DecoderMode = DecoderMode.AUTO,
     val hdrOutput: HdrOutput = HdrOutput.AUTO,
     val matchFrameRate: Boolean = true,
-    val orientation: PlayerOrientation = PlayerOrientation.LANDSCAPE,
+    val orientation: PlayerOrientation = PlayerOrientation.VIDEO,
     val preferredAudioLanguage: String = "",
     val preservePitch: Boolean = true,
 )
@@ -68,7 +71,12 @@ fun Preferences.toPlayerSettings(): PlayerSettings = PlayerSettings(
     decoderMode = DecoderMode.entries.firstOrNull { it.name == this[PlayerSettingsKeys.DECODER] } ?: DecoderMode.AUTO,
     hdrOutput = HdrOutput.entries.firstOrNull { it.name == this[PlayerSettingsKeys.HDR_OUTPUT] } ?: HdrOutput.AUTO,
     matchFrameRate = this[PlayerSettingsKeys.MATCH_FPS] ?: true,
-    orientation = PlayerOrientation.entries.firstOrNull { it.name == this[PlayerSettingsKeys.ORIENTATION] } ?: PlayerOrientation.LANDSCAPE,
+    orientation = PlayerOrientation.entries.firstOrNull { it.name == this[PlayerSettingsKeys.ORIENTATION_MODE] }
+        // Из старого ключа берём только осознанный выбор («Авто», «Портретная»): «Альбомная» там была умолчанием.
+        ?: PlayerOrientation.entries.firstOrNull {
+            it.name == this[PlayerSettingsKeys.ORIENTATION] && (it == PlayerOrientation.AUTO || it == PlayerOrientation.PORTRAIT)
+        }
+        ?: PlayerOrientation.VIDEO,
     preferredAudioLanguage = this[PlayerSettingsKeys.AUDIO_LANGUAGE] ?: "",
     preservePitch = this[PlayerSettingsKeys.PRESERVE_PITCH] ?: true,
 )

@@ -5,8 +5,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -31,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -47,10 +51,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import com.phnem.vap.ui.loading.BubbleClusterLoader
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -74,6 +79,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -83,6 +89,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -106,11 +113,15 @@ import com.phnem.vap.library.VideoFile
 import com.phnem.vap.library.VideoFolder
 import com.phnem.vap.player.model.PlayableItem
 import com.phnem.vap.ui.brand.VapWordmark
+import com.phnem.vap.ui.components.SpringPillRow
+import com.phnem.vap.ui.components.pulltorefresh.PullRefreshHost
+import com.phnem.vap.ui.onboarding.ThemeChoice
 import com.phnem.vap.ui.theme.MotionTokens
 import com.phnem.vap.ui.theme.SnProFamily
 import com.phnem.vap.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private val ScreenInset = 16.dp
 private val GridGap = 16.dp
@@ -134,6 +145,8 @@ internal const val QUEUE_ID = -1L
 fun LibraryRoot(
     onPlay: (List<PlayableItem>, Int) -> Unit,
     onRequestVideoAccess: () -> Unit,
+    theme: ThemeChoice,
+    onTheme: (ThemeChoice) -> Unit,
     viewModel: LibraryViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -186,7 +199,7 @@ fun LibraryRoot(
         scope.launch {
             try {
                 // Список и подписи первых карточек готовятся вне главного потока, до начала морфа.
-                val sheets = if (folder.files.isNotEmpty()) viewModel.prepareOpen(folder) else emptyList()
+                val sheets = viewModel.prepareOpen(folder)
                 stackKey = folder.id
                 morph.expand(folder, sheets, reduced)
             } finally {
@@ -225,7 +238,7 @@ fun LibraryRoot(
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         androidx.compose.runtime.CompositionLocalProvider(
-            LocalLibraryBottomInset provides if (hasPlayback) 200.dp else 128.dp,
+            LocalLibraryBottomInset provides 128.dp,
         ) {
         // Всё, что под доком и меню, собирается в слой для стекла.
         Box(
@@ -251,6 +264,7 @@ fun LibraryRoot(
                         onOpen = { playlistId = it },
                         onBack = { playlistId = NO_PLAYLIST },
                         onTitleClick = { overlay = Overlay.ScopeMenu },
+                        onSettings = { overlay = Overlay.Settings },
                         onMenu = { overlay = it },
                         onPlay = ::play,
                     )
@@ -269,6 +283,7 @@ fun LibraryRoot(
                         onAddFolder = { picker.launch(null) },
                         onRequestVideoAccess = onRequestVideoAccess,
                         onRescan = viewModel::rescan,
+                        onSettings = { overlay = Overlay.Settings },
                         onTitleClick = { overlay = Overlay.ScopeMenu },
                         onFilter = viewModel::setFilter,
                         onSortClick = { overlay = Overlay.SortMenu(forFiles = false) },
@@ -303,6 +318,7 @@ fun LibraryRoot(
                                 morph = morph,
                                 cardSheets = viewModel::cardSheets,
                                 onBack = ::back,
+                                onRescan = viewModel::rescan,
                                 onOpenChild = { child -> stackKey = (stack + child.id).joinToString("\n") },
                                 onFolderMenu = { overlay = Overlay.FolderMenu(it) },
                                 onFileMenu = { overlay = Overlay.FileMenu(it) },
@@ -325,13 +341,6 @@ fun LibraryRoot(
         // Док и мини-плеер остаются в композиции (мини-плеер держит соединение с сервисом и решение
         // «продолжить»), под клавиатурой они только становятся невидимыми.
         val underIme = Modifier.graphicsLayer { alpha = if (imeVisible) 0f else 1f }
-        NowPlayingBar(
-            backdrop = backdrop,
-            onVisibilityChanged = { hasPlayback = it },
-            modifier = underIme.align(Alignment.BottomCenter).fillMaxWidth()
-                .navigationBarsPadding().padding(start = 16.dp, end = 16.dp, bottom = 88.dp),
-        )
-
         LibraryDock(
             backdrop = backdrop,
             grid = state.settings.grid,
@@ -341,13 +350,17 @@ fun LibraryRoot(
             modifier = underIme,
         )
 
+        // Мини-плеер плавает поверх содержимого и дока: его можно утащить в любое место экрана.
+        NowPlayingBar(onVisibilityChanged = { hasPlayback = it }, modifier = underIme)
+
         LibrarySearchBar(
             visible = state.searchOpen,
             query = state.query,
             onQuery = viewModel::setQuery,
             onClose = viewModel::closeSearch,
             backdrop = backdrop,
-            hasPlayback = hasPlayback,
+            // Полоски плеера над доком больше нет: мини-плеер плавающий, строку поиска он не сдвигает.
+            hasPlayback = false,
         )
 
         overlay?.let { current ->
@@ -357,7 +370,9 @@ fun LibraryRoot(
                 viewModel = viewModel,
                 backdrop = backdrop,
                 onChange = { overlay = it },
-                onOpenFolder = { folder -> if (stack.isEmpty()) openFolder(folder) else stackKey = (stack + folder.id).joinToString("\n") },
+                theme = theme,
+                onTheme = onTheme,
+                onOpenFolder ={ folder -> if (stack.isEmpty()) openFolder(folder) else stackKey = (stack + folder.id).joinToString("\n") },
                 onPlay = ::play,
                 onOpenPlaylist = { playlistId = it },
             )
@@ -374,6 +389,8 @@ private fun LibraryOverlays(
     viewModel: LibraryViewModel,
     backdrop: Backdrop,
     onChange: (Overlay?) -> Unit,
+    theme: ThemeChoice,
+    onTheme: (ThemeChoice) -> Unit,
     onOpenFolder: (VideoFolder) -> Unit,
     onPlay: (List<PlayableItem>, Int) -> Unit,
     onOpenPlaylist: (Long) -> Unit,
@@ -384,6 +401,8 @@ private fun LibraryOverlays(
 
     when (overlay) {
         Overlay.NetworkSources -> com.phnem.vap.network.NetworkSourcesDialog(onPlay = { items -> close(); onPlay(items, 0) }, onDismiss = close)
+        Overlay.Settings -> SettingsSheet(theme, onTheme, onOpenUpdate = { onChange(Overlay.Update) }, onDismiss = close)
+        Overlay.Update -> com.phnem.vap.ui.update.UpdateSheet(manual = true, onDismiss = close)
         is Overlay.FolderMenu -> {
             val folder = overlay.folder
             val favorite = folder.id in data.favoriteFolders
@@ -595,6 +614,7 @@ private fun fileSortLabel(key: FileSortKey): Int = when (key) {
 
 // ——— Главный экран ———
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun LibraryHome(
     state: LibraryUiState,
@@ -609,6 +629,7 @@ private fun LibraryHome(
     onAddFolder: () -> Unit,
     onRequestVideoAccess: () -> Unit,
     onRescan: () -> Unit,
+    onSettings: () -> Unit,
     onTitleClick: () -> Unit,
     onFilter: (LibraryFilter) -> Unit,
     onSortClick: () -> Unit,
@@ -626,7 +647,7 @@ private fun LibraryHome(
     @Composable
     fun Header() {
         Column {
-            ScreenHeader(title = title, scanning = state.scanning, onRescan = onRescan, onTitleClick = onTitleClick)
+            ScreenHeader(title = title, onSettings = onSettings, onTitleClick = onTitleClick)
             if (state.videoAccess != com.phnem.vap.library.VideoAccess.FULL) {
                 Text(stringResource(if (state.videoAccess == com.phnem.vap.library.VideoAccess.PARTIAL) R.string.video_access_partial else R.string.video_access_denied),
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
@@ -647,7 +668,10 @@ private fun LibraryHome(
         val contentPadding = PaddingValues(start = ScreenInset, end = ScreenInset, bottom = LocalLibraryBottomInset.current)
         val cardWidth = gridCellWidth(maxWidth, ScreenInset, GridGap, columns)
 
-        if (settings.grid) {
+        // Потянуть вниз — пересканировать хранилище, как обновление списка в Vetro Collection.
+        PullRefreshHost(isRefreshing = state.scanning, onRefresh = onRescan, modifier = Modifier.fillMaxSize()) {
+        AnimatedContent(targetState = settings.grid, transitionSpec = { viewModeTransition(toGrid = targetState) }, label = "viewMode") { grid ->
+        if (grid) {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(columns),
                 modifier = Modifier.fillMaxSize().imePadding(),
@@ -684,24 +708,42 @@ private fun LibraryHome(
                 if (continueItems.isNotEmpty()) item { ContinueRow(continueItems, onContinue) }
                 if (folders.isEmpty() && !state.scanning) item { NothingFound() }
                 items(folders, key = { it.id }) { folder ->
-                    FolderRow(folder, onClick = { onOpen(folder) }, onLongClick = { onFolderMenu(folder) })
+                    FolderRow(
+                        folder = folder,
+                        sheets = state.cardSheets[folder.id] ?: cardSheets(folder),
+                        morph = morph,
+                        favorite = folder.id in state.data.favoriteFolders,
+                        onClick = { onOpen(folder) },
+                        onLongClick = { onFolderMenu(folder) },
+                    )
                 }
                 if (showAddTile) item { AddFolderTile(onAddFolder, Modifier.padding(top = 8.dp)) }
             }
+        }
+        }
         }
     }
 }
 
 /**
+ * Смена вида «сетка ↔ список»: старое содержимое уезжает в одну сторону, новое приезжает с другой.
+ * «Сетка» стоит слева в доке, «Список» справа, поэтому к списку всё едет влево, к сетке — вправо.
+ */
+internal fun viewModeTransition(toGrid: Boolean): ContentTransform {
+    val sign = if (toGrid) 1 else -1
+    return (slideInHorizontally(MotionTokens.standardOffset) { -sign * it } + fadeIn(MotionTokens.standard())) togetherWith
+        (slideOutHorizontally(MotionTokens.standardOffset) { sign * it } + fadeOut(MotionTokens.standard()))
+}
+
+/**
  * Заголовок экрана: крупный жирный гротеск (референс 1). С [onTitleClick] рядом стрелка: заголовок —
- * переключатель раздела. Справа значок «сканирование хранилища» (решение владельца №8), пока идёт
- * обход — с индикатором.
+ * переключатель раздела. Справа кнопка настроек; сканирование хранилища запускается жестом «потянуть
+ * для обновления» на главном экране.
  */
 @Composable
 fun ScreenHeader(
     title: String,
-    scanning: Boolean,
-    onRescan: (() -> Unit)?,
+    onSettings: (() -> Unit)?,
     modifier: Modifier = Modifier,
     onTitleClick: (() -> Unit)? = null,
     leading: @Composable (() -> Unit)? = null,
@@ -757,8 +799,8 @@ fun ScreenHeader(
                 )
             }
         }
-        if (onRescan != null) {
-            val description = stringResource(R.string.scan_storage)
+        if (onSettings != null) {
+            val description = stringResource(R.string.settings_title)
             Box(
                 Modifier
                     .size(44.dp)
@@ -767,16 +809,12 @@ fun ScreenHeader(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = onRescan,
+                        onClick = onSettings,
                     )
                     .semantics { contentDescription = description },
                 contentAlignment = Alignment.Center,
             ) {
-                if (scanning) {
-                    BubbleClusterLoader(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary)
-                } else {
-                    Icon(painterResource(R.drawable.ic_vap_scan), contentDescription = null, tint = ink)
-                }
+                Icon(painterResource(R.drawable.ic_vap_settings), contentDescription = null, tint = ink)
             }
         }
     }
@@ -785,6 +823,13 @@ fun ScreenHeader(
 /** Чипы фильтра (design-spec §3.1): активный — контрастная заливка. В конце — чип сортировки. */
 @Composable
 fun FilterChips(current: LibraryFilter, onSelect: (LibraryFilter) -> Unit, onSortClick: () -> Unit) {
+    val ink = MaterialTheme.colorScheme.onBackground
+    val labels = listOf(
+        stringResource(R.string.filter_all),
+        stringResource(R.string.filter_favorites),
+        stringResource(R.string.filter_unwatched),
+        stringResource(R.string.filter_watched),
+    )
     Row(
         Modifier
             .fillMaxWidth()
@@ -792,10 +837,16 @@ fun FilterChips(current: LibraryFilter, onSelect: (LibraryFilter) -> Unit, onSor
             .padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Chip(stringResource(R.string.filter_all), current == LibraryFilter.ALL) { onSelect(LibraryFilter.ALL) }
-        Chip(stringResource(R.string.filter_favorites), current == LibraryFilter.FAVORITES) { onSelect(LibraryFilter.FAVORITES) }
-        Chip(stringResource(R.string.filter_unwatched), current == LibraryFilter.UNWATCHED) { onSelect(LibraryFilter.UNWATCHED) }
-        Chip(stringResource(R.string.filter_watched), current == LibraryFilter.WATCHED) { onSelect(LibraryFilter.WATCHED) }
+        // Подложка выбранного фильтра пружинит от пункта к пункту; порядок пунктов совпадает с порядком enum.
+        SpringPillRow(
+            labels = labels,
+            selected = LibraryFilter.entries.indexOf(current),
+            onSelect = { onSelect(LibraryFilter.entries[it]) },
+            inactiveFill = ink.copy(alpha = 0.08f),
+            activeFill = ink,
+            activeText = MaterialTheme.colorScheme.background,
+            inactiveText = ink,
+        )
         Chip(stringResource(R.string.sort), selected = false, icon = R.drawable.ic_vap_sort, onClick = onSortClick)
     }
 }
@@ -935,9 +986,24 @@ private fun AddFolderTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
+private val FolderRowArtWidth = 72.dp
+private val FolderRowArtHeight = 69.dp
+
+/**
+ * Строка папки в режиме списка: уменьшенная плоская папка с листами слева. Листы участвуют в морфе так
+ * же, как на карточке сетки, поэтому открытие и закрытие в списке летают так же, как в сетке.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FolderRow(folder: VideoFolder, onClick: () -> Unit, onLongClick: () -> Unit) {
+fun FolderRow(
+    folder: VideoFolder,
+    sheets: List<VideoFile>,
+    morph: FolderMorph,
+    favorite: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    targetSlot: Int? = null,
+) {
     val ink = MaterialTheme.colorScheme.onBackground
     Row(
         Modifier
@@ -950,11 +1016,11 @@ fun FolderRow(folder: VideoFolder, onClick: () -> Unit, onLongClick: () -> Unit)
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(painterResource(R.drawable.ic_vap_folder), contentDescription = null, tint = ink.copy(alpha = 0.7f))
-        Spacer(Modifier.width(12.dp))
+        FolderArt(folder, sheets, morph, FolderRowArtWidth, FolderRowArtHeight, favorite = false, mini = true, targetSlot = targetSlot)
+        Spacer(Modifier.width(14.dp))
         Text(
             folder.name,
             color = ink,
@@ -963,8 +1029,12 @@ fun FolderRow(folder: VideoFolder, onClick: () -> Unit, onLongClick: () -> Unit)
             fontSize = 16.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            // Название занимает всё свободное место: число справа всегда стоит у правого края, а не «плавает».
             modifier = Modifier.weight(1f),
         )
+        if (favorite) {
+            Icon(painterResource(R.drawable.ic_vap_star), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 6.dp).size(16.dp))
+        }
         CountCapsule(folder.totalCount)
     }
 }

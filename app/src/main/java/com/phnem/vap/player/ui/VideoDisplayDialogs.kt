@@ -12,6 +12,8 @@ import com.phnem.vap.ui.components.PanelRow
 import com.phnem.vap.ui.components.VapSheet
 
 enum class PlayerOrientation(val requested: Int, val label: Int) {
+    /** По кадру: вертикальное видео — вертикально, остальное — горизонтально (`requested` — пока размер кадра неизвестен). */
+    VIDEO(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, R.string.player_orientation_video),
     AUTO(ActivityInfo.SCREEN_ORIENTATION_FULL_USER, R.string.player_orientation_auto),
     PORTRAIT(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT, R.string.player_orientation_portrait),
     LANDSCAPE(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, R.string.player_orientation_landscape),
@@ -52,7 +54,11 @@ fun OrientationDialog(value: PlayerOrientation, onSelect: (PlayerOrientation) ->
         PanelBody {
             PlayerOrientation.entries.forEach { mode ->
                 PanelRow(stringResource(mode.label), { onSelect(mode); close() },
-                    subtitle = if (mode == PlayerOrientation.AUTO) stringResource(R.string.player_orientation_auto_detail) else null,
+                    subtitle = when (mode) {
+                        PlayerOrientation.AUTO -> stringResource(R.string.player_orientation_auto_detail)
+                        PlayerOrientation.VIDEO -> stringResource(R.string.player_orientation_video_detail)
+                        else -> null
+                    },
                     selected = mode == value)
             }
         }

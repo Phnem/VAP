@@ -81,6 +81,27 @@ class LibraryProjectorLogicTest {
     }
 
     @Test
+    fun searchIgnoresPunctuationCaseAndWordOrder() {
+        val show = folder("9-1-1", listOf(file("9-1-1.S01E01.mkv"), file("9-1-1.S01E02.mkv")))
+        val got = folder("series", listOf(file("Game.of.Thrones.S01E01.mkv")))
+        val data = LibraryData(listOf(show, got))
+        assertEquals(listOf("9-1-1"), home(data, query = "911"))
+        assertEquals(listOf("9-1-1"), home(data, query = "9.1.1"))
+        assertEquals(listOf("9-1-1"), home(data, query = "9 1 1"))
+        assertEquals(listOf("series"), home(data, query = "thrones game"))
+        assertEquals(listOf("series"), home(data, query = "GAMEOFTHRONES"))
+        assertEquals(emptyList<String>(), home(data, query = "9112"))
+    }
+
+    @Test
+    fun foundFolderShowsAllItsFiles() {
+        val show = folder("9-1-1", listOf(file("S01E01.mkv"), file("S01E02.mkv")))
+        val data = LibraryData(listOf(show))
+        val names = LibraryProjector.files(show, data, LibraryFilter.ALL, SortSpec(FileSortKey.NAME), "911").map { it.name }
+        assertEquals(listOf("S01E01.mkv", "S01E02.mkv"), names)
+    }
+
+    @Test
     fun searchMatchesFolderNameOrAnyFileName() {
         val data = LibraryData(listOf(folder("shows", listOf(file("Frieren 01.mkv"))), folder("other", listOf(file("x.mkv")))))
         assertEquals(listOf("shows"), home(data, query = "frieren"))
