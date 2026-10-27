@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +74,9 @@ import com.phnem.vap.ui.theme.SnProFamily
 import com.phnem.vap.ui.theme.isAppInDarkTheme
 
 private val StickerWhite = Color(0xFFFFFFFF)
+
+/** Включено в настройках: папки цветные. По умолчанию выключено, папки матово-чёрные. */
+val LocalColoredFolders = staticCompositionLocalOf { false }
 
 /** Соотношение сторон карточки папки (ширина к высоте). */
 private const val CARD_ASPECT = 1.04f
@@ -174,7 +178,10 @@ internal fun FolderArt(
     shown.forEachIndexed { i, file ->
         LaunchedEffect(frames, file.thumbKey.id) { frames[i] = ThumbnailCache.frame(context, file, ThumbTier.CARD) }
     }
-    val colors = remember(folder.kind, folder.id, dark) { FolderPalette.of(folder, dark) }
+    val colored = LocalColoredFolders.current
+    val colors = remember(folder.kind, folder.id, dark, colored) {
+        if (colored) FolderPalette.of(folder, dark) else FolderPalette.matte(dark)
+    }
     // Радиусы прежней карточки (24 dp и 14 dp при ширине 160 dp) масштабируются вместе с папкой.
     val corner = w * 0.15f
     val tabCorner = w * 0.0875f
@@ -273,6 +280,18 @@ internal object FolderPalette {
             Palette[raw % Palette.size]
         }
     }
+
+    /**
+     * Матово-чёрная папка (режим «цветные папки» выключен). Задняя пластина чуть светлее передней, чтобы
+     * язычок и край читались и на чёрном фоне тёмной темы; кант тонкий и светлый, как на макете.
+     */
+    fun matte(dark: Boolean): FolderColors = FolderColors(
+        front = Color(0xFF212124),
+        frontEnd = Color(0xFF161618),
+        back = if (dark) Color(0xFF2C2C30) else Color(0xFF38383D),
+        rim = Color.White.copy(alpha = if (dark) 0.10f else 0.08f),
+        mark = Color.White.copy(alpha = 0.45f),
+    )
 
     fun of(folder: VideoFolder, dark: Boolean): FolderColors {
         var base = baseOf(folder)

@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
@@ -32,11 +33,15 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.phnem.vap.ui.theme.SnProFamily
@@ -56,6 +61,9 @@ private const val SPRING_STIFFNESS = 380f
 private const val SPRING_DAMPING_RATIO = 0.72f
 private const val STRETCH_PER_PX_PER_SECOND = 0.000325f
 private const val STRETCH_MAX = 0.14f
+private val PILL_GAP = 8.dp
+private val PILL_SIDE_PADDING = 16.dp
+private val PILL_SIDE_PADDING_MIN = 6.dp
 
 /**
  * Ряд пунктов-таблеток с пружинящей подложкой. [inactiveFill] — заливка каждого пункта, [activeFill] —
@@ -100,15 +108,28 @@ fun SpringPillRow(
         }
     }
 
-    Box(modifier) {
+    BoxWithConstraints(modifier) {
+        // Если пункты вместе с зазорами не помещаются, сужаем боковые поля: иначе последнему пункту достаётся
+        // остаток ширины, и его подпись переносится по буквам («Englis» без «h»).
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val sidePadding = remember(labels, fontSize, constraints.maxWidth, density) {
+            if (constraints.maxWidth == Constraints.Infinity) return@remember PILL_SIDE_PADDING
+            val style = TextStyle(fontFamily = SnProFamily, fontWeight = FontWeight.SemiBold, fontSize = fontSize)
+            val text = labels.sumOf { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width }
+            val gaps = with(density) { PILL_GAP.toPx() } * (labels.size - 1)
+            val room = (constraints.maxWidth - gaps - text) / (2f * labels.size) - 1f
+            with(density) { room.toDp() }.coerceIn(PILL_SIDE_PADDING_MIN, PILL_SIDE_PADDING)
+        }
         // Слой 1: заливки пунктов (подписи невидимы, нужны только для размера).
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(PILL_GAP)) {
             labels.forEachIndexed { index, label ->
                 PillCell(
                     label = label,
                     textColor = Color.Transparent,
                     fontSize = fontSize,
                     verticalPadding = verticalPadding,
+                    sidePadding = sidePadding,
                     minHeight = minHeight,
                     modifier = Modifier
                         .onPlaced {
@@ -144,7 +165,7 @@ fun SpringPillRow(
             }
         }
         // Слой 3: подписи и нажатия.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(PILL_GAP)) {
             labels.forEachIndexed { index, label ->
                 val color by animateColorAsState(
                     if (index == selected) activeText else inactiveText,
@@ -156,6 +177,7 @@ fun SpringPillRow(
                     textColor = color,
                     fontSize = fontSize,
                     verticalPadding = verticalPadding,
+                    sidePadding = sidePadding,
                     minHeight = minHeight,
                     modifier = Modifier
                         .clip(CircleShape)
@@ -177,13 +199,14 @@ private fun PillCell(
     textColor: Color,
     fontSize: TextUnit,
     verticalPadding: Dp,
+    sidePadding: Dp,
     minHeight: Dp,
     modifier: Modifier,
 ) {
     Box(
-        modifier.defaultMinSize(minHeight = minHeight).padding(horizontal = 16.dp, vertical = verticalPadding),
+        modifier.defaultMinSize(minHeight = minHeight).padding(horizontal = sidePadding, vertical = verticalPadding),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = textColor, fontFamily = SnProFamily, fontWeight = FontWeight.SemiBold, fontSize = fontSize, maxLines = 1)
+        Text(label, color = textColor, fontFamily = SnProFamily, fontWeight = FontWeight.SemiBold, fontSize = fontSize, maxLines = 1, softWrap = false)
     }
 }

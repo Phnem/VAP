@@ -409,6 +409,17 @@
     <string name="settings_ai_hint">Модели работают на устройстве и скачиваются один раз. Лучше загружать по Wi-Fi.</string>
     <string name="settings_ai_speech">Распознавание речи (Whisper)</string>
     <string name="settings_ai_translation">Перевод субтитров</string>
+    <string name="settings_ai_summary">Скачано %1$d из %2$d</string>
+    <string name="settings_colored_folders">Цветные папки</string>
+    <string name="settings_colored_folders_hint">Выключено: матово-чёрные папки</string>
+    <string name="sort_subtitle">Упорядочьте список</string>
+    <string name="sort_order_asc">По возрастанию</string>
+    <string name="sort_order_desc">По убыванию</string>
+    <string name="sort_hint_name">По алфавиту</string>
+    <string name="sort_hint_date">Сначала новые</string>
+    <string name="sort_hint_size">Сначала большие</string>
+    <string name="sort_hint_count">Больше видео</string>
+    <string name="sort_hint_duration">Сначала длинные</string>
 
     <!-- Обновления приложения -->
     <string name="upd_row_title">Проверка обновлений</string>

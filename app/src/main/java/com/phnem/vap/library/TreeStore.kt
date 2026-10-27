@@ -19,6 +19,8 @@ data class LibrarySettings(
     val treeMode: Boolean = false,
     val grid: Boolean = true,
     val scope: LibraryScope = LibraryScope.FOLDERS,
+    /** Выключено (по умолчанию): все папки матово-чёрные; включено: у каждой свой цвет из палитры. */
+    val coloredFolders: Boolean = false,
 )
 
 /**
@@ -56,6 +58,7 @@ class TreeStore(private val context: Context) {
         fileSort = SortSpec(enumOf(KEY_FILE_SORT, FileSortKey.NAME), prefs.getBoolean(KEY_FILE_DESC, false)),
         treeMode = prefs.getBoolean(KEY_TREE_MODE, false),
         grid = prefs.getBoolean(KEY_GRID, true),
+        coloredFolders = prefs.getBoolean(KEY_COLORED_FOLDERS, false),
         // Раздел не сохраняем: приложение всегда открывается на папках.
     )
 
@@ -67,6 +70,7 @@ class TreeStore(private val context: Context) {
         putBoolean(KEY_FILE_DESC, settings.fileSort.descending)
         putBoolean(KEY_TREE_MODE, settings.treeMode)
         putBoolean(KEY_GRID, settings.grid)
+        putBoolean(KEY_COLORED_FOLDERS, settings.coloredFolders)
     }
 
     /** Очередь последнего запуска плеера: «Продолжить» восстанавливает именно её (4.2.7). */
@@ -93,6 +97,7 @@ class TreeStore(private val context: Context) {
         const val KEY_FILE_SORT = "file_sort"
         const val KEY_FILE_DESC = "file_sort_desc"
         const val KEY_TREE_MODE = "tree_mode"
+        const val KEY_COLORED_FOLDERS = "colored_folders"
         const val KEY_SESSION = "session"
     }
 }

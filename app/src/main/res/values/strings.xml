@@ -411,6 +411,17 @@
     <string name="settings_ai_hint">Models run on this device and are downloaded once. Better to download them over Wi-Fi.</string>
     <string name="settings_ai_speech">Speech recognition (Whisper)</string>
     <string name="settings_ai_translation">Subtitle translation</string>
+    <string name="settings_ai_summary">%1$d of %2$d downloaded</string>
+    <string name="settings_colored_folders">Colored folders</string>
+    <string name="settings_colored_folders_hint">Off: matte black folders</string>
+    <string name="sort_subtitle">Order the list</string>
+    <string name="sort_order_asc">Ascending</string>
+    <string name="sort_order_desc">Descending</string>
+    <string name="sort_hint_name">By alphabet</string>
+    <string name="sort_hint_date">Newest first</string>
+    <string name="sort_hint_size">Largest first</string>
+    <string name="sort_hint_count">More videos</string>
+    <string name="sort_hint_duration">Longest first</string>
 
     <!-- App updates -->
     <string name="upd_row_title">Check for updates</string>

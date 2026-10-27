@@ -239,6 +239,7 @@ fun LibraryRoot(
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         androidx.compose.runtime.CompositionLocalProvider(
             LocalLibraryBottomInset provides 128.dp,
+            LocalColoredFolders provides state.settings.coloredFolders,
         ) {
         // Всё, что под доком и меню, собирается в слой для стекла.
         Box(
@@ -401,7 +402,13 @@ private fun LibraryOverlays(
 
     when (overlay) {
         Overlay.NetworkSources -> com.phnem.vap.network.NetworkSourcesDialog(onPlay = { items -> close(); onPlay(items, 0) }, onDismiss = close)
-        Overlay.Settings -> SettingsSheet(theme, onTheme, onOpenUpdate = { onChange(Overlay.Update) }, onDismiss = close)
+        Overlay.Settings -> SettingsSheet(
+            theme, onTheme,
+            coloredFolders = state.settings.coloredFolders,
+            onColoredFolders = viewModel::setColoredFolders,
+            onOpenUpdate = { onChange(Overlay.Update) },
+            onDismiss = close,
+        )
         Overlay.Update -> com.phnem.vap.ui.update.UpdateSheet(manual = true, onDismiss = close)
         is Overlay.FolderMenu -> {
             val folder = overlay.folder
@@ -491,37 +498,32 @@ private fun LibraryOverlays(
             )
         }
 
-        is Overlay.SortMenu -> GlassSheet(backdrop, onDismiss = close) { done ->
-            SheetTitle(stringResource(R.string.sort))
-            if (overlay.forFiles) {
-                val current = state.settings.fileSort
-                FileSortKey.entries.forEach { key ->
-                    val selected = current.key == key
-                    SheetItem(
-                        label = stringResource(fileSortLabel(key)),
-                        checked = selected,
-                        trailing = if (selected) arrow(current.descending) else null,
-                        onClick = {
-                            viewModel.setFileSort(if (selected) current.copy(descending = !current.descending) else SortSpec(key, descending = key != FileSortKey.NAME))
-                            done()
-                        },
-                    )
-                }
-            } else {
-                val current = state.settings.folderSort
-                FolderSortKey.entries.forEach { key ->
-                    val selected = current.key == key
-                    SheetItem(
-                        label = stringResource(folderSortLabel(key)),
-                        checked = selected,
-                        trailing = if (selected) arrow(current.descending) else null,
-                        onClick = {
-                            viewModel.setFolderSort(if (selected) current.copy(descending = !current.descending) else SortSpec(key, descending = key != FolderSortKey.NAME))
-                            done()
-                        },
-                    )
-                }
-            }
+        is Overlay.SortMenu -> if (overlay.forFiles) {
+            val current = state.settings.fileSort
+            val keys = FileSortKey.entries
+            SortSheet(
+                cards = keys.map { key ->
+                    SortCard(stringResource(fileSortLabel(key)), stringResource(fileSortHint(key)), fileSortIcon(key), current.key == key, current.descending)
+                },
+                onPick = { index ->
+                    val key = keys[index]
+                    viewModel.setFileSort(if (current.key == key) current.copy(descending = !current.descending) else SortSpec(key, descending = key != FileSortKey.NAME))
+                },
+                onDismiss = close,
+            )
+        } else {
+            val current = state.settings.folderSort
+            val keys = FolderSortKey.entries
+            SortSheet(
+                cards = keys.map { key ->
+                    SortCard(stringResource(folderSortLabel(key)), stringResource(folderSortHint(key)), folderSortIcon(key), current.key == key, current.descending)
+                },
+                onPick = { index ->
+                    val key = keys[index]
+                    viewModel.setFolderSort(if (current.key == key) current.copy(descending = !current.descending) else SortSpec(key, descending = key != FolderSortKey.NAME))
+                },
+                onDismiss = close,
+            )
         }
 
         is Overlay.PlaylistPicker -> GlassSheet(backdrop, onDismiss = close) { done ->
@@ -596,13 +598,39 @@ private fun LibraryOverlays(
     }
 }
 
-private fun arrow(descending: Boolean) = if (descending) "↓" else "↑"
-
 private fun folderSortLabel(key: FolderSortKey): Int = when (key) {
     FolderSortKey.NAME -> R.string.sort_name
     FolderSortKey.DATE -> R.string.sort_date
     FolderSortKey.SIZE -> R.string.sort_size
     FolderSortKey.COUNT -> R.string.sort_count
+}
+
+private fun folderSortHint(key: FolderSortKey): Int = when (key) {
+    FolderSortKey.NAME -> R.string.sort_hint_name
+    FolderSortKey.DATE -> R.string.sort_hint_date
+    FolderSortKey.SIZE -> R.string.sort_hint_size
+    FolderSortKey.COUNT -> R.string.sort_hint_count
+}
+
+private fun folderSortIcon(key: FolderSortKey): Int = when (key) {
+    FolderSortKey.NAME -> R.drawable.ic_vap_sort_name
+    FolderSortKey.DATE -> R.drawable.ic_vap_calendar
+    FolderSortKey.SIZE -> R.drawable.ic_vap_size
+    FolderSortKey.COUNT -> R.drawable.ic_vap_count
+}
+
+private fun fileSortHint(key: FileSortKey): Int = when (key) {
+    FileSortKey.NAME -> R.string.sort_hint_name
+    FileSortKey.DATE -> R.string.sort_hint_date
+    FileSortKey.SIZE -> R.string.sort_hint_size
+    FileSortKey.DURATION -> R.string.sort_hint_duration
+}
+
+private fun fileSortIcon(key: FileSortKey): Int = when (key) {
+    FileSortKey.NAME -> R.drawable.ic_vap_sort_name
+    FileSortKey.DATE -> R.drawable.ic_vap_calendar
+    FileSortKey.SIZE -> R.drawable.ic_vap_size
+    FileSortKey.DURATION -> R.drawable.ic_vap_clock
 }
 
 private fun fileSortLabel(key: FileSortKey): Int = when (key) {

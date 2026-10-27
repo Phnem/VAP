@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.3-Stable — 2026-10-27
+
+Matte black folders by default, a tidier Settings sheet, and sorting cards in the Vetro style.
+
+### Added
+
+- **Colored folders switch.** Settings → *Colored folders*. Off by default: every folder is matte black with a thin light rim, the back plate slightly lighter than the front so the tab and edges read on a black theme. On: the previous hand-picked colors.
+- **Sort cards.** The sort sheet now uses Vetro Collection cards: an icon tile, the option name, a short hint, and a radio mark; the selected card is tinted with the accent and shows the current direction (ascending or descending). Tapping the selected card flips the direction.
+
+### Changed
+
+- **AI models in one card.** Speech recognition and subtitle translation models are collapsed into a single *AI models* card that shows how many are downloaded and expands into the same list on tap. Download progress stays visible while it is collapsed.
+- **Settings without a header plate.** The title scrolls with the content, no straight-edged plate cuts the list under it, and the *Close* button floats at the top while you scroll.
+
+### Fixed
+
+- The *English* language pill lost its last letter when the three language options were wider than the screen. Option padding now shrinks to fit; the library filter uses the same selector.
+
+### Technical
+
+- `versionCode = 4`, `versionName = "v0.3-Stable"`; `coloredFolders` is a new library setting stored with the other view settings.
+
 ## v0.2-Stable — 2026-10-26
 
 Built-in updates, a floating mini player, and a lighter, calmer library.

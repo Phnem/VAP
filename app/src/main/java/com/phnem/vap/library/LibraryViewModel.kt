@@ -245,6 +245,7 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
     fun setFilter(filter: LibraryFilter) = update { it.copy(filter = filter) }
     fun setGrid(grid: Boolean) = update { it.copy(grid = grid) }
     fun setTreeMode(tree: Boolean) = update { it.copy(treeMode = tree) }
+    fun setColoredFolders(colored: Boolean) = update { it.copy(coloredFolders = colored) }
     fun setFolderSort(sort: SortSpec<FolderSortKey>) = update { it.copy(folderSort = sort) }
     fun setFileSort(sort: SortSpec<FileSortKey>) = update { it.copy(fileSort = sort) }
 

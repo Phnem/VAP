@@ -155,6 +155,23 @@ fun PanelHeader(title: String, modifier: Modifier = Modifier, trailing: String? 
     }
 }
 
+/**
+ * Кнопка закрытия, плавающая над прокручиваемым содержимым шторки (без шапки-подложки). Заливка
+ * непрозрачная: подложка шторки плюс [PanelColors.Chip], иначе строки под ней просвечивали бы.
+ */
+@Composable
+fun PanelFloatingClose(onClick: () -> Unit, modifier: Modifier = Modifier,
+    label: String = androidx.compose.ui.res.stringResource(com.phnem.vap.R.string.close)) {
+    // Шторка на экране светлее, чем PanelColors.Sheet (поверх неё рисуется контейнер), поэтому цвет «Chip поверх
+    // шторки» задан готовым непрозрачным значением, как у прежней кнопки в шапке.
+    val chip = if (LocalPanelDark.current) Color(0xFF3B3834) else lerp(IosDesign.sheetSurface(false), Color.Black, 0.06f)
+    Box(
+        modifier.defaultMinSize(minHeight = 40.dp).clip(CircleShape).background(chip)
+            .clickable(onClick = onClick).semantics { role = Role.Button }.padding(horizontal = 16.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(label, color = PanelColors.Ink, fontFamily = SnProFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1) }
+}
+
 /** Заголовок группы, как `IosSectionHeader` Collection, но без капса: русские фразы капсом нечитаемы. */
 @Composable
 fun PanelSection(text: String, modifier: Modifier = Modifier) {

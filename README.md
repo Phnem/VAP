@@ -10,12 +10,12 @@ VAP (Vetro Android Player) brings the video player from Vetro Collection into it
 
 ## Download
 
-The current release is **v0.2-Stable**. Download signed APKs from [GitHub Releases](https://github.com/Phnem/VAP/releases/latest).
+The current release is **v0.3-Stable**. Download signed APKs from [GitHub Releases](https://github.com/Phnem/VAP/releases/latest).
 
 | APK | Choose this for |
 | --- | --- |
-| **VAP-v0.2-Stable-foss.apk** | The main build without the Google Cast SDK. Includes local playback, network sources, DLNA, and AI tools. |
-| **VAP-v0.2-Stable-cast.apk** | Everything in the main build, plus Google Cast. Includes the Google Cast SDK. |
+| **VAP-v0.3-Stable-foss.apk** | The main build without the Google Cast SDK. Includes local playback, network sources, DLNA, and AI tools. |
+| **VAP-v0.3-Stable-cast.apk** | Everything in the main build, plus Google Cast. Includes the Google Cast SDK. |
 
 Both APKs are universal builds for `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`. Requires **Android 8.0 / API 26 or later**. Both variants use the package ID `com.phnem.vap` and replace each other when installed. Updating an installation signed with the same key preserves app data.
 
