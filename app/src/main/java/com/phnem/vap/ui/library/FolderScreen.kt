@@ -49,6 +49,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import com.phnem.vap.util.Haptic
+import com.phnem.vap.util.performHaptic
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -78,14 +81,16 @@ import java.util.Locale
 
 private val ScreenInset = 16.dp
 private val GridGap = 16.dp
-private val WatchedGreen = Color(0xFF34C759)
+/** Зелёный «просмотрено»: им же отмечаются выбранные видео. */
+internal val WatchedGreen = Color(0xFF34C759)
 
 /** Строка экрана папки: заголовок сезона, вложенная папка (режим дерева) или файл. */
 private sealed interface Entry {
     val key: String
 
-    data class Season(val season: Int?) : Entry {
-        override val key get() = "s:$season"
+    /** [fresh] — секция «Новое», а не сезон. */
+    data class Season(val season: Int?, val fresh: Boolean = false) : Entry {
+        override val key get() = if (fresh) "s:new" else "s:$season"
     }
 
     /** [slot] — номер цели морфа, если на эту папку садится лист с главного экрана (режим дерева). */
@@ -114,7 +119,7 @@ fun FolderScreen(
     onRescan: () -> Unit,
     onOpenChild: (VideoFolder) -> Unit,
     onFolderMenu: (VideoFolder) -> Unit,
-    onFileMenu: (VideoFile) -> Unit,
+    select: MultiSelect,
     onPlay: (List<PlayableItem>, Int) -> Unit,
     onFilter: (LibraryFilter) -> Unit,
     onSortClick: () -> Unit,
@@ -131,12 +136,13 @@ fun FolderScreen(
     }
     // Очередь плеера — вся папка, а не отфильтрованный список: после поиска «дальше» не должно
     // перепрыгивать через файлы.
+    // Список на экране ставит новинки выше, а очередь идёт в обычном порядке: серии подряд, а не с новой в начале.
     val ordered = remember(folder, data, settings.fileSort, files) {
         traced("VAP.fs.ordered") {
-            if (settings.filter == LibraryFilter.ALL && state.query.isBlank()) {
+            if (settings.filter == LibraryFilter.ALL && state.query.isBlank() && data.newCount(folder, deep = false) == 0) {
                 files
             } else {
-                LibraryProjector.files(folder, data, LibraryFilter.ALL, settings.fileSort, "")
+                LibraryProjector.files(folder, data, LibraryFilter.ALL, settings.fileSort, "", newFirst = false)
             }
         }
     }
@@ -151,7 +157,7 @@ fun FolderScreen(
             emptyList()
         }
     }
-    val sections = remember(files) { traced("VAP.fs.sections") { SeriesGrouping.group(files) { it.name } } }
+    val sections = remember(files, data) { traced("VAP.fs.sections") { SeriesGrouping.groupWithNew(files, data::isNew) { it.name } } }
     val entries = remember(children, sections, isRoot) {
         traced("VAP.fs.entries") { buildList {
             // Листы с карточки открытой папки садятся в её первые три элемента: вложенные папки идут первыми.
@@ -159,7 +165,7 @@ fun FolderScreen(
             var displayIndex = 0
             val titled = sections.size > 1 || sections.firstOrNull()?.season != null
             sections.forEach { section ->
-                if (titled) add(Entry.Season(section.season))
+                if (titled) add(Entry.Season(section.season, section.fresh))
                 section.files.forEach { add(Entry.FileItem(it, displayIndex++)) }
             }
         } }
@@ -194,7 +200,7 @@ fun FolderScreen(
     @Composable
     fun Item(entry: Entry, cardWidth: Dp, grid: Boolean) {
         when (entry) {
-            is Entry.Season -> SeasonHeader(entry.season)
+            is Entry.Season -> SeasonHeader(entry.season, entry.fresh)
             is Entry.Child -> {
                 val c = entry.folder
                 if (grid) {
@@ -207,6 +213,7 @@ fun FolderScreen(
                         onClick = { onOpenChild(c) },
                         onLongClick = { onFolderMenu(c) },
                         targetSlot = entry.slot,
+                        mark = data.newMark(c, deep = true),
                     )
                 } else {
                     FolderRow(
@@ -217,6 +224,7 @@ fun FolderScreen(
                         onClick = { onOpenChild(c) },
                         onLongClick = { onFolderMenu(c) },
                         targetSlot = entry.slot,
+                        mark = data.newMark(c, deep = true),
                     )
                 }
             }
@@ -225,17 +233,27 @@ fun FolderScreen(
                 LaunchedEffect(file.key) { ensureMeta(file) }
                 // Файлы идут после вложенных папок, поэтому их номер цели сдвинут на число папок.
                 val morphIndex = (children.size + entry.displayIndex).takeIf { isRoot && it < MAX_SHEETS }
+                val view = LocalView.current
                 val open = { onPlay(queue, queueIndex[file.key] ?: 0) }
+                // При выборе тап отмечает, а не запускает; удержание начинает выбор.
+                val tap: () -> Unit = { if (select.phase == MultiSelect.Phase.SELECTING) select.toggle(file, folder.id) else open() }
+                val hold: () -> Unit = { if (select.toggle(file, folder.id)) performHaptic(view, Haptic.Heavy) }
+                // Пока выбранные ждут папку, первые карточки этой папки — цели полёта стопки.
+                val dropIndex = entry.displayIndex.takeIf { select.phase == MultiSelect.Phase.MOVING && it < MAX_STACK }
                 if (grid) {
                     FileCard(
                         file = file,
                         meta = data.meta[file.key],
                         watch = data.history[file.key],
                         favorite = file.key in data.favoriteFiles,
+                        isNew = data.isNew(file),
                         morph = morph,
                         morphIndex = morphIndex,
-                        onClick = open,
-                        onLongClick = { onFileMenu(file) },
+                        onClick = tap,
+                        onLongClick = hold,
+                        visual = select.visualOf(file),
+                        select = select,
+                        dropIndex = dropIndex,
                     )
                 } else {
                     FileRow(
@@ -243,10 +261,14 @@ fun FolderScreen(
                         meta = data.meta[file.key],
                         watch = data.history[file.key],
                         favorite = file.key in data.favoriteFiles,
+                        isNew = data.isNew(file),
                         morph = morph,
                         morphIndex = morphIndex,
-                        onClick = open,
-                        onLongClick = { onFileMenu(file) },
+                        onClick = tap,
+                        onLongClick = hold,
+                        visual = select.visualOf(file),
+                        select = select,
+                        dropIndex = dropIndex,
                     )
                 }
             }
@@ -295,9 +317,13 @@ fun FolderScreen(
 }
 
 @Composable
-private fun SeasonHeader(season: Int?) {
+private fun SeasonHeader(season: Int?, fresh: Boolean) {
     Text(
-        text = if (season != null) stringResource(R.string.season_title, season) else stringResource(R.string.season_other),
+        text = when {
+            fresh -> stringResource(R.string.new_badge)
+            season != null -> stringResource(R.string.season_title, season)
+            else -> stringResource(R.string.season_other)
+        },
         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
         fontFamily = SnProFamily,
         fontWeight = FontWeight.SemiBold,
@@ -322,8 +348,12 @@ private fun Thumbnail(
     file: VideoFile,
     watch: WatchInfo?,
     favorite: Boolean,
+    isNew: Boolean,
     morph: FolderMorph,
     morphIndex: Int?,
+    visual: SelectVisual,
+    select: MultiSelect,
+    dropIndex: Int?,
     modifier: Modifier = Modifier,
 ) {
     val ink = MaterialTheme.colorScheme.onBackground
@@ -332,6 +362,9 @@ private fun Thumbnail(
         ?.let { (it.positionMs.toFloat() / it.durationMs).coerceIn(0f, 1f) } ?: 0f
     Box(
         modifier
+            // Откуда улетит миниатюра и куда сядет, когда выбранные переносят сюда.
+            .then(if (visual == SelectVisual.SELECTED) Modifier.onPlaced { select.cardCoords[file.key] = it } else Modifier)
+            .then(if (dropIndex != null) Modifier.onPlaced { select.dropCoords[dropIndex] = it } else Modifier)
             .then(
                 if (morphIndex != null) {
                     Modifier
@@ -357,7 +390,7 @@ private fun Thumbnail(
             Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color.Black.copy(alpha = 0.25f)))
             Box(Modifier.align(Alignment.BottomStart).fillMaxWidth(fraction).height(4.dp).background(MaterialTheme.colorScheme.primary))
         }
-        if (watch?.watched == true) {
+        if (watch?.watched == true && visual == SelectVisual.NONE) {
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
@@ -370,6 +403,9 @@ private fun Thumbnail(
                 Icon(painterResource(R.drawable.ic_vap_check), contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
             }
         }
+        // Новое видео не смотрели, поэтому галочки «просмотрено» на нём нет и угол свободен.
+        if (isNew && visual == SelectVisual.NONE) NewChip(Modifier.align(Alignment.TopEnd).padding(8.dp))
+        SelectionOverlay(visual)
         if (favorite) {
             Icon(
                 painter = painterResource(R.drawable.ic_vap_star),
@@ -388,10 +424,14 @@ private fun FileCard(
     meta: FileMeta?,
     watch: WatchInfo?,
     favorite: Boolean,
+    isNew: Boolean,
     morph: FolderMorph,
     morphIndex: Int?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    visual: SelectVisual,
+    select: MultiSelect,
+    dropIndex: Int?,
 ) {
     val ink = MaterialTheme.colorScheme.onBackground
     Column(
@@ -402,7 +442,7 @@ private fun FileCard(
             onLongClick = onLongClick,
         ),
     ) {
-        Thumbnail(file, watch, favorite, morph, morphIndex, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+        Thumbnail(file, watch, favorite, isNew, morph, morphIndex, visual, select, dropIndex, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
         Spacer(Modifier.height(8.dp))
         Text(
             file.title,
@@ -424,10 +464,14 @@ private fun FileRow(
     meta: FileMeta?,
     watch: WatchInfo?,
     favorite: Boolean,
+    isNew: Boolean,
     morph: FolderMorph,
     morphIndex: Int?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    visual: SelectVisual,
+    select: MultiSelect,
+    dropIndex: Int?,
 ) {
     val ink = MaterialTheme.colorScheme.onBackground
     Row(
@@ -441,7 +485,7 @@ private fun FileRow(
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Thumbnail(file, watch, favorite, morph, morphIndex, Modifier.width(128.dp).aspectRatio(16f / 9f))
+        Thumbnail(file, watch, favorite, isNew, morph, morphIndex, visual, select, dropIndex, Modifier.width(128.dp).aspectRatio(16f / 9f))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f).fillMaxHeight()) {
             Text(

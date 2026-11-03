@@ -10,12 +10,12 @@ VAP (Vetro Android Player) brings the video player from Vetro Collection into it
 
 ## Download
 
-The current release is **v0.3-Stable**. Download signed APKs from [GitHub Releases](https://github.com/Phnem/VAP/releases/latest).
+The current release is **v0.4-Stable**. Download signed APKs from [GitHub Releases](https://github.com/Phnem/VAP/releases/latest).
 
 | APK | Choose this for |
 | --- | --- |
-| **VAP-v0.3-Stable-foss.apk** | The main build without the Google Cast SDK. Includes local playback, network sources, DLNA, and AI tools. |
-| **VAP-v0.3-Stable-cast.apk** | Everything in the main build, plus Google Cast. Includes the Google Cast SDK. |
+| **VAP-v0.4-Stable-foss.apk** | The main build without the Google Cast SDK. Includes local playback, network sources, DLNA, and AI tools. |
+| **VAP-v0.4-Stable-cast.apk** | Everything in the main build, plus Google Cast. Includes the Google Cast SDK. |
 
 Both APKs are universal builds for `arm64-v8a`, `armeabi-v7a`, `x86_64`, and `x86`. Requires **Android 8.0 / API 26 or later**. Both variants use the package ID `com.phnem.vap` and replace each other when installed. Updating an installation signed with the same key preserves app data.
 
@@ -29,6 +29,8 @@ APKs from GitHub Releases update themselves. VAP checks for a new release at lau
 
 - **Video library:** MediaStore scanning, additional Storage Access Framework (SAF) folders, directory trees, grid and list layouts with animated switching, flat colored folders that open and close, thumbnails, forgiving search (`911` finds `9-1-1`), sorting, filters, and pull to refresh.
 - **Watch organization:** favorites, hidden folders, history, resume playback, playlists, and a playback queue.
+- **New videos:** anything you have not opened yet rises to the top with an orange *New* chip; a folder gets the chip when it or all of its videos are new, and a small dot when only some videos inside are. What was on the device at the first scan is not flagged.
+- **Multi-select:** hold a video, tap more, and use the glass mini-dock to delete (always confirmed), move to another folder, favorite, or mark as watched. Moving parks the selection as a stack of thumbnails in the corner while you browse to the target folder. Android asks for its own consent when VAP deletes or moves files.
 - **Playback:** AndroidX Media3 / ExoPlayer, gesture controls, a playback speed ruler (0.5×–3.0×), zoom and aspect ratio settings, orientation chosen from the video, track selection, background playback, picture-in-picture, and an in-app floating mini player.
 - **Updates:** built-in checks, fast resumable downloads, and signature verification for builds signed with the author's key.
 - **Audio and video tools:** processing settings, external audio tracks, audio synchronization, screenshots, and clip export tools.

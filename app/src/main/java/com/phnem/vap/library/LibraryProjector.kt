@@ -14,6 +14,9 @@ data class WatchInfo(val positionMs: Long, val durationMs: Long, val watched: Bo
 
 data class FileMeta(val durationMs: Long, val width: Int, val height: Int)
 
+/** Метка «нового» на папке: ничего, индикатор (новая лишь часть видео внутри) или полный чип. */
+enum class NewMark { NONE, DOT, CHIP }
+
 /**
  * Единое правило «просмотрено» (как в Vetro): остаток не больше большего из 30 с и 5% длительности.
  * Кнопка «Отметить просмотренным» и автоматическая отметка по концу ходят через него же.
@@ -38,6 +41,10 @@ class LibraryData(
     val favoriteFiles: Set<String> = emptySet(),
     val hidden: Set<String> = emptySet(),
     val meta: Map<String, FileMeta> = emptyMap(),
+    /** Что пользователь ещё не видел; считается при сканировании ([NewTracker]), здесь только читается. */
+    val unseen: NewState = NewState.EMPTY,
+    /** Файлы, которые уже удалены или перенесены, но обход хранилища ещё не убрал их из списка: на экране их нет. */
+    val hiding: Set<String> = emptySet(),
 ) {
     val byId: Map<String, VideoFolder> = nodes.associateBy { it.id }
 
@@ -47,6 +54,44 @@ class LibraryData(
     }
 
     fun isWatched(file: VideoFile): Boolean = history[file.uri.toString()]?.watched == true
+
+    /** Видео новое, пока его не открывали (оно появилось после первого сканирования) и истории просмотра у него нет. */
+    fun isNew(file: VideoFile): Boolean = file.key in unseen.videos && file.key !in history
+
+    private val ownNew: Map<String, Int> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        if (unseen.videos.isEmpty()) emptyMap() else nodes.associate { node -> node.id to node.files.count { isNew(it) } }
+    }
+
+    private val deepNew: Map<String, Int> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        if (unseen.videos.isEmpty()) {
+            emptyMap()
+        } else {
+            val memo = HashMap<String, Int>()
+            fun count(node: VideoFolder): Int = memo.getOrPut(node.id) {
+                (ownNew[node.id] ?: 0) + node.childIds.sumOf { id -> byId[id]?.let { count(it) } ?: 0 }
+            }
+            nodes.forEach { count(it) }
+            memo
+        }
+    }
+
+    /** Сколько в папке новых видео: своих или (при [deep]) вместе со вложенными. */
+    fun newCount(folder: VideoFolder, deep: Boolean): Int = (if (deep) deepNew else ownNew)[folder.id] ?: 0
+
+    /**
+     * Метка папки. Полный чип — папка новая сама (её ещё не открывали) или новым оказалось всё её
+     * содержимое; индикатор — новы лишь некоторые видео внутри.
+     */
+    fun newMark(folder: VideoFolder, deep: Boolean): NewMark {
+        val total = if (deep) folder.totalCount else folder.files.size
+        val fresh = newCount(folder, deep)
+        return when {
+            total > 0 && fresh == total -> NewMark.CHIP
+            folder.id in unseen.folders -> NewMark.CHIP
+            fresh > 0 -> NewMark.DOT
+            else -> NewMark.NONE
+        }
+    }
 
     fun isHidden(folder: VideoFolder): Boolean {
         var cur: VideoFolder? = folder
@@ -96,11 +141,11 @@ object LibraryProjector {
             .filter { matchesFolder(it, data, filter, query, deep = treeMode) }
             .map { if (treeMode) it else it.copy(totalCount = it.files.size, totalSize = it.files.sumOf { file -> file.sizeBytes },
                 newestModified = it.files.maxOfOrNull { file -> file.lastModified } ?: 0) }
-            .sortedWith(folderComparator(sort, data))
+            .sortedWith(folderComparator(sort, data, deep = treeMode))
     }
 
     fun hiddenFolders(data: LibraryData, sort: SortSpec<FolderSortKey>): List<VideoFolder> =
-        data.nodes.filter { it.id in data.hidden }.sortedWith(folderComparator(sort, data))
+        data.nodes.filter { it.id in data.hidden }.sortedWith(folderComparator(sort, data, deep = false, newFirst = false))
 
     /** Вложенные папки открытой папки (режим дерева). */
     fun childFolders(
@@ -113,21 +158,25 @@ object LibraryProjector {
         parent.childIds.mapNotNull(data.byId::get)
             .filter { !data.isHidden(it) }
             .filter { matchesFolder(it, data, filter, query, deep = true) }
-            .sortedWith(folderComparator(sort, data))
+            .sortedWith(folderComparator(sort, data, deep = true))
 
-    /** Файлы открытой папки. */
+    /**
+     * Файлы открытой папки. Новинки идут выше остальных ([newFirst]); очереди воспроизведения нужен
+     * обычный порядок без этого подъёма, чтобы серии шли подряд.
+     */
     fun files(
         folder: VideoFolder,
         data: LibraryData,
         filter: LibraryFilter,
         sort: SortSpec<FileSortKey>,
         query: String,
+        newFirst: Boolean = true,
     ): List<VideoFile> {
         val terms = SearchTerms.parse(query)
         val folderHit = !terms.isEmpty && terms.matches(SearchTerms.compact(folder.name))
         return folder.files
-            .filter { matchesFile(it, data, filter, terms, folderHit) }
-            .sortedWith(fileComparator(sort, data))
+            .filter { it.key !in data.hiding && matchesFile(it, data, filter, terms, folderHit) }
+            .sortedWith(fileComparator(sort, data, newFirst))
     }
 
     /**
@@ -136,7 +185,8 @@ object LibraryProjector {
      * фильтра и поиска, но без сортировки всего списка: карточек много, файлов в папке сотни.
      */
     fun firstFiles(folder: VideoFolder, data: LibraryData, sort: SortSpec<FileSortKey>, limit: Int): List<VideoFile> {
-        val source = folder.files.ifEmpty { data.filesUnder(folder) }
+        val all = folder.files.ifEmpty { data.filesUnder(folder) }
+        val source = if (data.hiding.isEmpty()) all else all.filter { it.key !in data.hiding }
         return smallest(source, limit, fileComparator(sort, data))
     }
 
@@ -205,7 +255,19 @@ object LibraryProjector {
 
     // ——— Сортировка ———
 
-    private fun folderComparator(sort: SortSpec<FolderSortKey>, data: LibraryData): Comparator<VideoFolder> {
+    /** Новинки и папки с новинками выше остальных; внутри каждой группы действует выбранная сортировка. */
+    private fun folderComparator(
+        sort: SortSpec<FolderSortKey>,
+        data: LibraryData,
+        deep: Boolean,
+        newFirst: Boolean = true,
+    ): Comparator<VideoFolder> {
+        val base = baseFolderComparator(sort, data)
+        if (!newFirst) return base
+        return compareByDescending<VideoFolder> { data.newMark(it, deep) != NewMark.NONE }.then(base)
+    }
+
+    private fun baseFolderComparator(sort: SortSpec<FolderSortKey>, data: LibraryData): Comparator<VideoFolder> {
         val byName = compareBy<VideoFolder> { it.name.lowercase(Locale.getDefault()) }
         if (sort.key == FolderSortKey.COUNT) {
             val count = compareBy<VideoFolder> { it.totalCount }
@@ -222,7 +284,7 @@ object LibraryProjector {
         return favoriteFirst.then(if (sort.descending) base.reversed() else base)
     }
 
-    private fun fileComparator(sort: SortSpec<FileSortKey>, data: LibraryData): Comparator<VideoFile> {
+    private fun fileComparator(sort: SortSpec<FileSortKey>, data: LibraryData, newFirst: Boolean = true): Comparator<VideoFile> {
         val byName = compareBy<VideoFile>(
             { it.episode?.season ?: Int.MAX_VALUE },
             { it.episode?.episode ?: Int.MAX_VALUE },
@@ -234,7 +296,8 @@ object LibraryProjector {
             FileSortKey.SIZE -> compareBy<VideoFile> { it.sizeBytes }.then(byName)
             FileSortKey.DURATION -> compareBy<VideoFile> { data.meta[it.uri.toString()]?.durationMs ?: 0L }.then(byName)
         }
-        return if (sort.descending) base.reversed() else base
+        val ordered = if (sort.descending) base.reversed() else base
+        return if (newFirst) compareByDescending<VideoFile> { data.isNew(it) }.then(ordered) else ordered
     }
 }
 
@@ -263,9 +326,22 @@ class SearchTerms private constructor(private val whole: String, private val wor
 }
 
 /** Секция списка: «Сезон N» ([season] != null) или общий список без сезона. */
-data class FileSection<T>(val season: Int?, val files: List<T>)
+data class FileSection<T>(val season: Int?, val files: List<T>, val fresh: Boolean = false)
 
 object SeriesGrouping {
+    /**
+     * То же деление на сезоны, но когда есть новинки и остальное разделено на сезоны, новинки идут первой
+     * секцией «Новое»: иначе новая серия 3-го сезона лежала бы внизу, в своём сезоне. Без сезонов список
+     * остаётся одним (в нём новинки и так стоят первыми).
+     */
+    fun <T> groupWithNew(items: List<T>, isNew: (T) -> Boolean, nameOf: (T) -> String): List<FileSection<T>> {
+        val fresh = items.filter(isNew)
+        if (fresh.isEmpty() || fresh.size == items.size) return group(items, nameOf)
+        val rest = group(items.filterNot(isNew), nameOf)
+        val titled = rest.size > 1 || rest.first().season != null
+        return if (titled) listOf(FileSection(null, fresh, fresh = true)) + rest else listOf(FileSection(null, items))
+    }
+
     /**
      * Делит элементы на сезоны, если большая часть имён распознана как серии (4.2.9). Порядок внутри
      * секции остаётся тем, что пришёл (его задаёт сортировка). Обобщён по типу, чтобы проверяться

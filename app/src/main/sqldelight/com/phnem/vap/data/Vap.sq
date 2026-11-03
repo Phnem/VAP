@@ -133,3 +133,26 @@ SELECT * FROM video_meta;
 
 upsertMeta:
 INSERT OR REPLACE INTO video_meta(uri, duration_ms, width, height) VALUES (?, ?, ?, ?);
+
+-- «Новое» = то, чего нет в этих таблицах. Видео попадает сюда, когда его открыли, или при первом полном
+-- сканировании источника (всё, что лежало до приложения, новым не считается); папка — когда её открыли.
+-- Те же две таблицы создаёт миграция 1.sqm.
+CREATE TABLE seen_video (
+    uri TEXT NOT NULL PRIMARY KEY
+);
+
+allSeenVideos:
+SELECT uri FROM seen_video;
+
+addSeenVideo:
+INSERT OR IGNORE INTO seen_video(uri) VALUES (?);
+
+CREATE TABLE seen_folder (
+    folder_id TEXT NOT NULL PRIMARY KEY
+);
+
+allSeenFolders:
+SELECT folder_id FROM seen_folder;
+
+addSeenFolder:
+INSERT OR IGNORE INTO seen_folder(folder_id) VALUES (?);

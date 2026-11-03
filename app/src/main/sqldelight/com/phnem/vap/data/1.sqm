@@ -1,0 +1,8 @@
+-- Версия 1 → 2: учёт «нового» (что пользователь уже видел).
+CREATE TABLE seen_video (
+    uri TEXT NOT NULL PRIMARY KEY
+);
+
+CREATE TABLE seen_folder (
+    folder_id TEXT NOT NULL PRIMARY KEY
+);

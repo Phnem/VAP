@@ -68,6 +68,9 @@ import kotlinx.coroutines.launch
 sealed interface Overlay {
     data class FolderMenu(val folder: VideoFolder) : Overlay
     data class FileMenu(val file: VideoFile) : Overlay
+
+    /** Подтверждение удаления выбранных видео: без него файлы не трогаются. */
+    data class ConfirmDelete(val files: List<VideoFile>) : Overlay
     data object ScopeMenu : Overlay
     data object NetworkSources : Overlay
     data object Settings : Overlay

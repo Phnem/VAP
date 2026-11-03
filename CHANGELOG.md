@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.4-Stable — 2026-11-03
+
+Tracks what is new, selects several videos at once, and closes folders reliably.
+
+### Added
+
+- **New videos and folders.** Anything you have not seen yet rises to the top: folders with new videos on the home screen, new videos inside a folder (in series folders they form a *New* section above the seasons). A video is new until you open it; a folder is new until you open and close it. Everything that was on the device (or in a picked folder) at its first full scan counts as already seen, so a library that existed before VAP is not flagged. Widening video access (selected videos → all videos) does not flag the old videos either. The playback queue keeps the normal order, so episodes still play one after another.
+- **"New" chip and folder indicator.** A new video thumbnail carries an orange *New* chip. A folder shows the full chip when the folder itself is new or all of its videos are; when only some videos inside are new it shows a small orange dot. In list mode the chip sits next to the video count and the dot on the folder icon.
+- **Multi-select by long press.** Hold a video to select it (check mark and a green frame, the same green as the watched mark), tap others to add them. A small glass dock appears at the top right with outline icons: trash (red, always asks to confirm), move to another folder, favorite, mark as watched, and *More* (the old video menu) when one video is selected. *Move* sends the selected thumbnails as a small square stack to the top-left corner under the Back button and turns the dock into two bubbles: confirm and cancel. The stack stays on top while you go back and open any folder; the confirm bubble stays dim until a different, compatible folder is open. Confirm flies the stack into that folder's grid and removes the videos from the old one; cancel throws the stack and the bubbles off the top of the screen and moves nothing. Back clears a selection that has not been sent to the corner.
+- **Glass notifications.** Results of delete and move appear in a dark glass pill above the dock and the mini player, instead of a white system toast.
+
+### Changed
+
+- Long press on a video now selects it instead of opening the video menu; the menu is behind *More* when one video is selected.
+- Delete and move need the system's consent dialog on Android 11 and later (*Allow VAP to modify/delete…*). Moving works inside one storage volume, and inside the same provider for folders added by hand. Folders you add by hand now keep read and write access; folders added by an earlier version have read-only access, so add one again to let VAP change files in it.
+
+### Fixed
+
+- Closing a folder sometimes skipped the flying sheets: after the activity was recreated (rotation, theme or language change, returning from a killed process), after the folder screen was scrolled past its first cards, or when the first videos changed while the folder was open. The sheets now always fly back to what the folder screen shows, and the home list keeps its order while a folder is open so the sheets land on the card they came from. A second Back press during the closing animation no longer starts a second close.
+
+### Technical
+
+- `versionCode = 5`, `versionName = "v0.4-Stable"`.
+- Database version 2: `seen_video` and `seen_folder` tables (migration `1.sqm`); the baseline is stored per source (device storage or one SAF tree) in the `library_new` preferences. Updating from `v0.3-Stable` upgrades the database in place and keeps your data.
+
 ## v0.3-Stable — 2026-10-27
 
 Matte black folders by default, a tidier Settings sheet, and sorting cards in the Vetro style.

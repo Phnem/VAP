@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -69,6 +70,15 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
     private val cache = ScanCache(app)
     private val history = VapData.history(app)
     private val user = VapData.user(app)
+    private val tracker = NewTracker(app, user)
+
+    // Что пользователь ещё не видел. Пока источник не просканирован хотя бы раз, «нового» нет.
+    private val fresh = MutableStateFlow(NewState.EMPTY)
+
+    private val ops = FileOps(app)
+
+    // Удалённые и перенесённые файлы пропадают с экрана сразу, а не после обхода хранилища.
+    private val hiding = MutableStateFlow<Set<String>>(emptySet())
 
     // Список папок из кэша виден сразу, свежий обход идёт в фоне.
     private val scan = MutableStateFlow(cache.load().orEmpty().filterNot { DeviceVideoIndex.isDeviceFolder(it.id) })
@@ -94,14 +104,14 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
     private val metaRequested = HashSet<String>()
 
     private val dataFlow: Flow<LibraryData> = combine(
-        scan,
+        combine(scan, fresh, hiding) { nodes, unseen, gone -> Triple(nodes, unseen, gone) },
         history.observe(),
         user.favorites(),
         user.hidden(),
         // Метаданные приходят пачкой по одному файлу; без паузы каждая запись пересобирала бы весь экран.
         user.meta().debounce(400),
-    ) { nodes, hist, fav: Favorites, hidden, meta ->
-        LibraryData(nodes, hist, fav.folders, fav.files, hidden, meta)
+    ) { (nodes, unseen, gone), hist, fav: Favorites, hidden, meta ->
+        LibraryData(nodes, hist, fav.folders, fav.files, hidden, meta, unseen, gone)
     }
 
     private val viewFlow: Flow<ViewState> = combine(hasSources, scanning, settings, scope, query, searchOpen, videoAccess, scanFailed) { values ->
@@ -153,6 +163,14 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
         rescan()
         // Первый вызов форматтера размера (~9 мс) оплачивается здесь, а не в первом кадре открытия папки.
         viewModelScope.launch(Dispatchers.Default) { ByteSizeText.format(app, 1_500_000L) }
+        // Список из кэша виден сразу, и «новое» в нём тоже: иначе метки и порядок прыгали бы после обхода хранилища.
+        viewModelScope.launch(Dispatchers.IO) {
+            val cached = scan.value
+            if (cached.isEmpty()) return@launch
+            val unseen = tracker.refresh(cached, VideoAccess.NONE, deviceScanned = false)
+            // Обход мог уже опубликовать своё: тогда оно точнее.
+            fresh.update { if (it === NewState.EMPTY) unseen else it }
+        }
     }
 
     // ——— Сканирование ———
@@ -189,7 +207,11 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
                 // Recheck runtime permission: grants can change while a provider query is running.
                 val latestAccess = VideoPermissions.access(app)
                 videoAccess.value = latestAccess
-                scan.value = if (latestAccess != access) found.filterNot { DeviceVideoIndex.isDeviceFolder(it.id) } else found
+                val published = if (latestAccess != access) found.filterNot { DeviceVideoIndex.isDeviceFolder(it.id) } else found
+                // «Новое» публикуется раньше списка: между двумя присваиваниями экран увидит старый список с
+                // уже новым набором (в нём «нового» лишь меньше), а не наоборот.
+                fresh.value = withContext(Dispatchers.IO) { tracker.refresh(published, latestAccess, deviceScanned = !scanFailed.value) }
+                scan.value = published
                 hasSources.value = trees.trees().isNotEmpty() || latestAccess != VideoAccess.NONE
                 withContext(Dispatchers.IO) { cache.save(saf) }
                 if (latestAccess != access) rescan() else submitThumbnails(scan.value, sweep = !scanFailed.value)
@@ -231,6 +253,8 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
     fun stopObserving() {
         if (observing) app.contentResolver.unregisterContentObserver(mediaObserver)
         observing = false; refreshJob?.cancel()
+        // Библиотеки на экране больше нет (открылся плеер): теперь можно переставить карточки.
+        flushSeen()
     }
     override fun onCleared() { stopObserving(); super.onCleared() }
 
@@ -275,12 +299,84 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
     fun setFileFavorite(file: VideoFile, on: Boolean) = io { user.setFavorite(false, file.key, on) }
     fun setHidden(id: String, hidden: Boolean) = io { user.setHidden(id, hidden) }
 
-    fun markWatched(file: VideoFile) = io {
-        val known = state.value.data.meta[file.key]?.durationMs ?: 0L
-        history.markWatched(file.key, file.title, known)
+    fun markWatched(file: VideoFile) {
+        markPlayed(file.key)
+        io {
+            val known = state.value.data.meta[file.key]?.durationMs ?: 0L
+            history.markWatched(file.key, file.title, known)
+        }
     }
 
-    fun resetProgress(file: VideoFile) = io { history.reset(file.key) }
+    fun resetProgress(file: VideoFile) {
+        // Сброс прогресса не возвращает видео в «новые»: его уже открывали.
+        markPlayed(file.key)
+        io { history.reset(file.key) }
+    }
+
+    // ——— Действия над несколькими видео ———
+
+    fun setFilesFavorite(files: List<VideoFile>, on: Boolean) = io { files.forEach { user.setFavorite(false, it.key, on) } }
+
+    fun markAllWatched(files: List<VideoFile>) = files.forEach(::markWatched)
+
+    fun resetAllProgress(files: List<VideoFile>) = files.forEach(::resetProgress)
+
+    /** Окно согласия системы на удаление; null — не нужно. */
+    fun deleteConsent(files: List<VideoFile>) = ops.deleteConsent(files)
+
+    /** Окно согласия системы на перенос; null — не нужно. */
+    fun moveConsent(files: List<VideoFile>) = ops.moveConsent(files)
+
+    fun deleteFiles(files: List<VideoFile>, consented: Boolean, onResult: (OpResult) -> Unit) {
+        hiding.update { it + files.map(VideoFile::key) }
+        viewModelScope.launch { finishOperation(files, ops.delete(files, consented), onResult) }
+    }
+
+    fun moveFiles(files: List<VideoFile>, dest: VideoFolder, onResult: (OpResult) -> Unit) {
+        hiding.update { it + files.map(VideoFile::key) }
+        val index = state.value.data.fileIndex
+        viewModelScope.launch { finishOperation(files, ops.move(files, { index[it.key]?.second }, dest), onResult) }
+    }
+
+    /**
+     * Не получившиеся файлы возвращаются в список сразу; получившиеся остаются скрытыми, пока обход
+     * хранилища не подтвердит новое положение (у перенесённого файла тот же ключ, и в папке назначения он
+     * иначе был бы скрыт).
+     */
+    private suspend fun finishOperation(files: List<VideoFile>, result: OpResult, onResult: (OpResult) -> Unit) {
+        hiding.update { it - result.failedKeys.toSet() }
+        onResult(result)
+        rescan()
+        scanJob?.join()
+        hiding.update { it - files.map(VideoFile::key).toSet() }
+    }
+
+    /**
+     * Видео открыли (или отметили просмотренным): оно больше не новое. В базу отметка пишется сразу; на экране
+     * при [deferred] она применяется, когда плеер закроет библиотеку ([flushSeen]): иначе карточка под
+     * пальцем «прыгала» бы вверх-вниз, пока плеер выезжает.
+     */
+    fun markPlayed(uri: String, deferred: Boolean = false) {
+        if (uri !in fresh.value.videos) return
+        io { tracker.markVideos(listOf(uri)) }
+        if (deferred) pendingSeen += uri else fresh.update { it.withoutVideos(listOf(uri)) }
+    }
+
+    private val pendingSeen = HashSet<String>()
+
+    private fun flushSeen() {
+        if (pendingSeen.isEmpty()) return
+        val uris = pendingSeen.toList()
+        pendingSeen.clear()
+        fresh.update { it.withoutVideos(uris) }
+    }
+
+    /** Папку открыли и закрыли: сама она больше не новая (новыми могут остаться видео внутри). */
+    fun markFolderSeen(id: String) {
+        if (id !in fresh.value.folders) return
+        fresh.update { it.withoutFolder(id) }
+        io { tracker.markFolder(id) }
+    }
 
     fun enqueue(files: List<VideoFile>) {
         io { user.addToQueue(files.map { it.key to it.title }) }
@@ -300,10 +396,13 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
     fun removeFromPlaylist(id: Long, position: Long) = io { user.removeFromPlaylist(id, position) }
     fun playlistItems(id: Long): Flow<List<QueueEntry>> = user.playlistItems(id)
 
-    /** Файлы папки в порядке текущей сортировки: очередь плеера и «листы» на карточке берут их отсюда. */
+    /**
+     * Файлы папки в порядке текущей сортировки, как их играет очередь плеера: без подъёма новинок, чтобы
+     * серии шли подряд.
+     */
     fun orderedFiles(folder: VideoFolder): List<VideoFile> {
         val s = state.value
-        return LibraryProjector.files(folder, s.data, LibraryFilter.ALL, s.settings.fileSort, "")
+        return LibraryProjector.files(folder, s.data, LibraryFilter.ALL, s.settings.fileSort, "", newFirst = false)
     }
 
     /**
@@ -324,7 +423,7 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
         traced("VAP.prepareOpen") {
             val s = state.value
             val shown = LibraryProjector.files(folder, s.data, s.settings.filter, s.settings.fileSort, s.query)
-            val ordered = SeriesGrouping.group(shown) { it.name }.flatMap { it.files }
+            val ordered = SeriesGrouping.groupWithNew(shown, s.data::isNew) { it.name }.flatMap { it.files }
             // Подписи размера первых карточек считаются здесь, а не при их первой отрисовке на главном потоке.
             ByteSizeText.warm(app, ordered.take(VISIBLE_CARDS))
             val children = if (s.settings.treeMode) {

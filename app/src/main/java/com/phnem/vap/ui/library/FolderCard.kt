@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.phnem.vap.R
 import com.phnem.vap.library.FolderKind
+import com.phnem.vap.library.NewMark
 import com.phnem.vap.library.ThumbTier
 import com.phnem.vap.library.ThumbnailCache
 import com.phnem.vap.library.VideoFile
@@ -108,6 +109,7 @@ fun FolderCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
     targetSlot: Int? = null,
+    mark: NewMark = NewMark.NONE,
 ) {
     val ink = MaterialTheme.colorScheme.onBackground
     Column(
@@ -123,7 +125,7 @@ fun FolderCard(
         // Ширину ячейки знает сетка, поэтому подкомпозиция `BoxWithConstraints` на каждую карточку
         // (она идёт в фазе измерения, при каждом появлении ячейки на экране) не нужна.
         Box(Modifier.fillMaxWidth().aspectRatio(CARD_ASPECT)) {
-            FolderArt(folder, sheets, morph, cardWidth, cardWidth / CARD_ASPECT, favorite, mini = false, targetSlot = targetSlot)
+            FolderArt(folder, sheets, morph, cardWidth, cardWidth / CARD_ASPECT, favorite, mini = false, targetSlot = targetSlot, mark = mark)
         }
         Spacer(Modifier.height(8.dp))
         Row(
@@ -164,6 +166,7 @@ internal fun FolderArt(
     mini: Boolean,
     targetSlot: Int?,
     modifier: Modifier = Modifier,
+    mark: NewMark = NewMark.NONE,
 ) {
     val dark = isAppInDarkTheme()
     val ink = MaterialTheme.colorScheme.onBackground
@@ -224,6 +227,18 @@ internal fun FolderArt(
                 }
                 .platePaint(colors.front, colors.rim, RoundedCornerShape(corner), colors.frontEnd),
         )
+        if (mark != NewMark.NONE) {
+            // Метка сидит на передней пластине и гаснет вместе с её откидыванием. На маленькой папке строки
+            // списка чипу тесно: там только индикатор у угла, а чип стоит в самой строке.
+            val place = if (mini) {
+                Modifier.align(Alignment.TopStart).offset(x = (-3).dp, y = (-3).dp)
+            } else {
+                Modifier.align(Alignment.TopStart).offset(x = 12.dp, y = h * (1f - PLATE_HEIGHT) + 10.dp)
+            }
+            Box(place.graphicsLayer { alpha = 1f - morph.plateProgress(folder.id) }) {
+                if (mark == NewMark.CHIP) NewChip() else NewDot()
+            }
+        }
         if (!mini) {
             // Подпись автора слева внизу — знак VAP (решение владельца №3).
             VapWordmark(
@@ -341,6 +356,42 @@ fun CountCapsule(count: Int, modifier: Modifier = Modifier) {
             fontSize = 12.sp,
         )
     }
+}
+
+/** Чип «Новое»: оранжевая капсула, как метка новых серий в Vetro. */
+@Composable
+internal fun NewChip(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.new_badge),
+            color = Color.White,
+            fontFamily = SnProFamily,
+            fontWeight = FontWeight.Bold,
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+        )
+    }
+}
+
+/** Индикатор на папке: новыми оказались только некоторые видео внутри, а сама папка и её содержимое целиком — нет. */
+@Composable
+internal fun NewDot(modifier: Modifier = Modifier) {
+    val description = stringResource(R.string.new_videos_description)
+    Box(
+        modifier
+            .size(14.dp)
+            .clip(CircleShape)
+            .background(Color.White)
+            .padding(2.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .semantics { contentDescription = description },
+    )
 }
 
 /**

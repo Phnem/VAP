@@ -106,6 +106,8 @@ import com.phnem.vap.library.LibraryFilter
 import com.phnem.vap.library.LibraryScope
 import com.phnem.vap.library.LibraryUiState
 import com.phnem.vap.library.LibraryViewModel
+import com.phnem.vap.library.FileRules
+import com.phnem.vap.library.NewMark
 import com.phnem.vap.library.SortSpec
 import com.phnem.vap.library.ThumbTier
 import com.phnem.vap.library.ThumbnailCache
@@ -119,6 +121,7 @@ import com.phnem.vap.ui.onboarding.ThemeChoice
 import com.phnem.vap.ui.theme.MotionTokens
 import com.phnem.vap.ui.theme.SnProFamily
 import com.phnem.vap.ui.theme.rememberReducedMotion
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -132,6 +135,9 @@ private val GridGap = 16.dp
  * стеклу нечем было размывать. Теперь слой всегда на весь экран, а список листается дальше.
  */
 internal val LocalLibraryBottomInset = androidx.compose.runtime.compositionLocalOf { 128.dp }
+/** Сообщение в капсуле; сравнение по ссылке, поэтому повтор того же текста перезапускает таймер. */
+private class Notice(val text: String)
+
 internal const val NO_PLAYLIST = -2L
 internal const val QUEUE_ID = -1L
 
@@ -155,6 +161,7 @@ fun LibraryRoot(
     }
     val backdrop = rememberFreezableBackdrop()
     val morph = remember { FolderMorph() }
+    val select = remember { MultiSelect() }
     // Пока папка открывается или закрывается, подложка стекла дока не пишется: размытие над неизменным
     // слоем не пересчитывается (около 20 проходов рендера на кадр), по окончании оно плавно переезжает.
     LaunchedEffect(morph.flying) { if (morph.flying) backdrop.freeze() else backdrop.thaw() }
@@ -169,6 +176,9 @@ fun LibraryRoot(
     var overlay by remember { mutableStateOf<Overlay?>(null) }
     val stack = remember(stackKey) { stackKey.split('\n').filter { it.isNotEmpty() } }
     val rootFolder = stack.firstOrNull()?.let { state.data.byId[it] }
+    // Пока папка открыта, порядок карточек главного экрана не меняется: закрытие летит к той карточке, с которой
+    // открывали, а новинки и пересканирование могли бы передвинуть её или убрать с экрана.
+    var frozenHome by remember { mutableStateOf<List<VideoFolder>?>(null) }
 
     val needsRestore = remember { stackKey.isNotEmpty() }
     var restored by remember { mutableStateOf(false) }
@@ -188,9 +198,50 @@ fun LibraryRoot(
 
     fun play(items: List<PlayableItem>, index: Int) {
         if (items.isEmpty()) return
+        // Открытое видео больше не новое; остальные в очереди новыми остаются, пока до них не дойдёт просмотр.
+        items.getOrNull(index)?.let { viewModel.markPlayed(it.uri, deferred = true) }
         viewModel.rememberSession(items)
         onPlay(items, index)
     }
+
+    // Удаление и перенос медиафайлов с Android 11 требуют согласия системы отдельным окном; операция идёт после него.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // Результат операций показывается стеклянной капсулой, а не системным тостом.
+    var notice by remember { mutableStateOf<Notice?>(null) }
+    fun notify(text: String) { notice = Notice(text) }
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            delay(2600)
+            notice = null
+        }
+    }
+    var pendingConsent by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val consentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val action = pendingConsent
+        pendingConsent = null
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            action?.invoke()
+        } else {
+            notify(context.getString(R.string.multi_denied))
+        }
+    }
+    fun withConsent(sender: android.content.IntentSender?, action: () -> Unit) {
+        if (sender == null) {
+            action()
+        } else {
+            pendingConsent = action
+            consentLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(sender).build())
+        }
+    }
+    fun report(result: com.phnem.vap.library.OpResult, doneRes: Int) {
+        val parts = buildList {
+            if (result.done > 0) add(context.getString(doneRes, result.done))
+            if (result.failed > 0) add(context.getString(R.string.multi_failed, result.failed))
+        }
+        if (parts.isNotEmpty()) notify(parts.joinToString(" · "))
+    }
+    // Выбор живёт внутри одной папки: уход из неё или переход во вложенную его снимает.
+    LaunchedEffect(stackKey) { if (select.phase == MultiSelect.Phase.SELECTING) select.clearSelection() }
 
     val opening = remember { booleanArrayOf(false) }
     fun openFolder(folder: VideoFolder) {
@@ -200,6 +251,7 @@ fun LibraryRoot(
             try {
                 // Список и подписи первых карточек готовятся вне главного потока, до начала морфа.
                 val sheets = viewModel.prepareOpen(folder)
+                frozenHome = if (state.scope == LibraryScope.HIDDEN) state.hiddenFolders else state.folders
                 stackKey = folder.id
                 morph.expand(folder, sheets, reduced)
             } finally {
@@ -210,11 +262,19 @@ fun LibraryRoot(
 
     fun back() {
         when {
-            morph.progress.isRunning -> Unit
+            morph.progress.isRunning || morph.closing -> Unit
             stack.size > 1 -> stackKey = stack.dropLast(1).joinToString("\n")
+            // Папка ещё не раскрылась (или не восстановлена после пересоздания Activity): закрывать нечего.
+            stack.size == 1 && morph.open == null -> Unit
             stack.size == 1 -> scope.launch {
-                morph.collapse(reduced)
+                val folder = state.data.byId[stack[0]]
+                // Листы летят к тому, что экран папки показывает сейчас, а не к тому, что было при открытии.
+                val current = folder?.let { viewModel.prepareOpen(it) }
+                morph.collapse(reduced, current)
+                // Отметка после закрытия: пока папка открыта, список под ней не должен переставляться.
+                folder?.let { viewModel.markFolderSeen(it.id) }
                 stackKey = ""
+                frozenHome = null
             }
         }
     }
@@ -229,6 +289,10 @@ fun LibraryRoot(
             else -> viewModel.setScope(LibraryScope.FOLDERS)
         }
     }
+
+    // Позже остальных, поэтому «назад» сначала снимает выбор. Пока выбранные ждут папку (MOVING), «назад» работает
+    // как обычно: так можно дойти до нужной папки; отменяет перенос пузырёк.
+    BackHandler(enabled = select.phase == MultiSelect.Phase.SELECTING) { select.clearSelection() }
 
     // Клавиатура поднимает строку поиска и прячет док с мини-плеером; флаг меняется дважды за показ,
     // а не на каждом кадре анимации клавиатуры.
@@ -246,7 +310,7 @@ fun LibraryRoot(
             Modifier
                 .fillMaxSize()
                 .freezableBackdrop(backdrop, MaterialTheme.colorScheme.background)
-                .onGloballyPositioned { morph.root = it },
+                .onGloballyPositioned { morph.root = it; select.root = it },
         ) {
             Box(
                 Modifier
@@ -273,10 +337,11 @@ fun LibraryRoot(
                     val hiddenScope = state.scope == LibraryScope.HIDDEN
                     LibraryHome(
                         state = state,
-                        folders = if (hiddenScope) state.hiddenFolders else state.folders,
+                        folders = frozenHome?.takeIf { stack.isNotEmpty() } ?: if (hiddenScope) state.hiddenFolders else state.folders,
                         title = stringResource(if (hiddenScope) R.string.scope_hidden else R.string.library_title),
                         showContinue = !hiddenScope && state.query.isBlank() && state.settings.filter == LibraryFilter.ALL,
                         showAddTile = !hiddenScope,
+                        showNew = !hiddenScope,
                         morph = morph,
                         cardSheets = viewModel::cardSheets,
                         onOpen = ::openFolder,
@@ -320,9 +385,12 @@ fun LibraryRoot(
                                 cardSheets = viewModel::cardSheets,
                                 onBack = ::back,
                                 onRescan = viewModel::rescan,
-                                onOpenChild = { child -> stackKey = (stack + child.id).joinToString("\n") },
+                                onOpenChild = { child ->
+                                    viewModel.markFolderSeen(child.id)
+                                    stackKey = (stack + child.id).joinToString("\n")
+                                },
                                 onFolderMenu = { overlay = Overlay.FolderMenu(it) },
-                                onFileMenu = { overlay = Overlay.FileMenu(it) },
+                                select = select,
                                 onPlay = ::play,
                                 onFilter = viewModel::setFilter,
                                 onSortClick = { overlay = Overlay.SortMenu(forFiles = true) },
@@ -336,6 +404,7 @@ fun LibraryRoot(
             }
 
             FlyingPapers(morph)
+            SelectionFlight(select)
         }
         }
 
@@ -351,8 +420,51 @@ fun LibraryRoot(
             modifier = underIme,
         )
 
+        // Мини-док выбора: действия над выбранными видео, а при переносе — пузырьки «принять» и «отменить».
+        val picked = select.selection
+        val destFolder = stack.lastOrNull()?.let { state.data.byId[it] }
+        val canDrop = select.phase == MultiSelect.Phase.MOVING && destFolder != null && !morph.progress.isRunning &&
+            picked.all { FileRules.canMove(it, state.data.fileIndex[it.key]?.second, destFolder) }
+        val favoriteAll = picked.isNotEmpty() && picked.all { it.key in state.data.favoriteFiles }
+        val watchedAll = picked.isNotEmpty() && picked.all { state.data.isWatched(it) }
+        SelectionDock(
+            select = select,
+            backdrop = backdrop,
+            canDrop = canDrop,
+            favoriteOn = favoriteAll,
+            watchedOn = watchedAll,
+            canMore = picked.size == 1,
+            onDelete = { overlay = Overlay.ConfirmDelete(picked.toList()) },
+            onMove = { scope.launch { select.gatherToCorner(reduced) } },
+            onFavorite = {
+                viewModel.setFilesFavorite(picked.toList(), !favoriteAll)
+                select.clearSelection()
+            },
+            onWatched = {
+                if (watchedAll) viewModel.resetAllProgress(picked.toList()) else viewModel.markAllWatched(picked.toList())
+                select.clearSelection()
+            },
+            onMore = { picked.singleOrNull()?.let { file -> select.clearSelection(); overlay = Overlay.FileMenu(file) } },
+            onConfirm = {
+                val dest = destFolder
+                if (!canDrop || dest == null) {
+                    notify(context.getString(R.string.multi_pick_folder))
+                } else {
+                    val moving = picked.toList()
+                    withConsent(viewModel.moveConsent(moving)) {
+                        scope.launch { select.dropIntoFolder(reduced) }
+                        viewModel.moveFiles(moving, dest) { report(it, R.string.multi_moved) }
+                    }
+                }
+            },
+            onCancel = { scope.launch { select.eject(reduced) } },
+        )
+
         // Мини-плеер плавает поверх содержимого и дока: его можно утащить в любое место экрана.
         NowPlayingBar(onVisibilityChanged = { hasPlayback = it }, modifier = underIme)
+
+        // Выше мини-плеера: уведомление о результате не должно прятаться за ним.
+        GlassToast(notice?.text, backdrop)
 
         LibrarySearchBar(
             visible = state.searchOpen,
@@ -373,9 +485,22 @@ fun LibraryRoot(
                 onChange = { overlay = it },
                 theme = theme,
                 onTheme = onTheme,
-                onOpenFolder ={ folder -> if (stack.isEmpty()) openFolder(folder) else stackKey = (stack + folder.id).joinToString("\n") },
+                onOpenFolder = { folder ->
+                    if (stack.isEmpty()) {
+                        openFolder(folder)
+                    } else {
+                        viewModel.markFolderSeen(folder.id)
+                        stackKey = (stack + folder.id).joinToString("\n")
+                    }
+                },
                 onPlay = ::play,
                 onOpenPlaylist = { playlistId = it },
+                onDeleteConfirmed = { files ->
+                    withConsent(viewModel.deleteConsent(files)) {
+                        viewModel.deleteFiles(files, consented = true) { report(it, R.string.multi_deleted) }
+                        select.clearSelection()
+                    }
+                },
             )
         }
     }
@@ -395,6 +520,7 @@ private fun LibraryOverlays(
     onOpenFolder: (VideoFolder) -> Unit,
     onPlay: (List<PlayableItem>, Int) -> Unit,
     onOpenPlaylist: (Long) -> Unit,
+    onDeleteConfirmed: (List<VideoFile>) -> Unit,
 ) {
     val data = state.data
     val scope = rememberCoroutineScope()
@@ -466,6 +592,25 @@ private fun LibraryOverlays(
                     SheetItem(stringResource(R.string.action_reset_progress), icon = R.drawable.ic_vap_close, onClick = { viewModel.resetProgress(file); done() })
                 }
             }
+        }
+
+        is Overlay.ConfirmDelete -> GlassSheet(backdrop, onDismiss = close) { done ->
+            val count = overlay.files.size
+            SheetTitle(if (count == 1) stringResource(R.string.multi_delete_one) else stringResource(R.string.multi_delete_many, count))
+            Text(
+                stringResource(R.string.multi_delete_body),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                fontFamily = SnProFamily,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+            SheetItem(
+                stringResource(R.string.multi_delete),
+                icon = R.drawable.ic_vap_trash,
+                destructive = true,
+                onClick = { done(); onDeleteConfirmed(overlay.files) },
+            )
+            SheetItem(stringResource(R.string.multi_cancel), icon = R.drawable.ic_vap_close, onClick = done)
         }
 
         Overlay.ScopeMenu -> GlassSheet(backdrop, onDismiss = close) { done ->
@@ -650,6 +795,7 @@ private fun LibraryHome(
     title: String,
     showContinue: Boolean,
     showAddTile: Boolean,
+    showNew: Boolean,
     morph: FolderMorph,
     cardSheets: (VideoFolder) -> List<VideoFile>,
     onOpen: (VideoFolder) -> Unit,
@@ -721,6 +867,7 @@ private fun LibraryHome(
                         cardWidth = cardWidth,
                         onClick = { onOpen(folder) },
                         onLongClick = { onFolderMenu(folder) },
+                        mark = if (showNew) state.data.newMark(folder, deep = settings.treeMode) else NewMark.NONE,
                     )
                 }
                 if (showAddTile) item { AddFolderTile(onAddFolder) }
@@ -743,6 +890,7 @@ private fun LibraryHome(
                         favorite = folder.id in state.data.favoriteFolders,
                         onClick = { onOpen(folder) },
                         onLongClick = { onFolderMenu(folder) },
+                        mark = if (showNew) state.data.newMark(folder, deep = settings.treeMode) else NewMark.NONE,
                     )
                 }
                 if (showAddTile) item { AddFolderTile(onAddFolder, Modifier.padding(top = 8.dp)) }
@@ -1031,6 +1179,7 @@ fun FolderRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     targetSlot: Int? = null,
+    mark: NewMark = NewMark.NONE,
 ) {
     val ink = MaterialTheme.colorScheme.onBackground
     Row(
@@ -1047,7 +1196,11 @@ fun FolderRow(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FolderArt(folder, sheets, morph, FolderRowArtWidth, FolderRowArtHeight, favorite = false, mini = true, targetSlot = targetSlot)
+        // На крошечной папке строки только индикатор; полный чип стоит в самой строке, рядом с числом видео.
+        FolderArt(
+            folder, sheets, morph, FolderRowArtWidth, FolderRowArtHeight, favorite = false, mini = true, targetSlot = targetSlot,
+            mark = if (mark == NewMark.DOT) mark else NewMark.NONE,
+        )
         Spacer(Modifier.width(14.dp))
         Text(
             folder.name,
@@ -1062,6 +1215,10 @@ fun FolderRow(
         )
         if (favorite) {
             Icon(painterResource(R.drawable.ic_vap_star), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 6.dp).size(16.dp))
+        }
+        if (mark == NewMark.CHIP) {
+            NewChip()
+            Spacer(Modifier.width(6.dp))
         }
         CountCapsule(folder.totalCount)
     }

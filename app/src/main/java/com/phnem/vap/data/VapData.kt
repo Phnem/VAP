@@ -90,6 +90,17 @@ class UserRepository(private val db: VapDatabase) {
 
     fun saveMeta(uri: String, meta: FileMeta) = q.upsertMeta(uri, meta.durationMs, meta.width.toLong(), meta.height.toLong())
 
+    // ——— Что пользователь уже видел (основа «нового») ———
+
+    fun seenVideos(): Set<String> = q.allSeenVideos().executeAsList().toHashSet()
+
+    fun seenFolders(): Set<String> = q.allSeenFolders().executeAsList().toHashSet()
+
+    fun markSeen(videos: Collection<String>, folders: Collection<String>) = db.transaction {
+        videos.forEach { q.addSeenVideo(it) }
+        folders.forEach { q.addSeenFolder(it) }
+    }
+
     // ——— Плейлисты ———
 
     fun playlists(): Flow<List<PlaylistSummary>> = q.allPlaylists().asFlow().mapToList(Dispatchers.IO).map { rows ->

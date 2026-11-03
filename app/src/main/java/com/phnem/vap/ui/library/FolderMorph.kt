@@ -117,6 +117,10 @@ class FolderMorph {
     var to by mutableStateOf<List<Rect?>>(emptyList())
         private set
 
+    /** Закрытие идёт: повторное «назад» второе закрытие не запускает. */
+    var closing = false
+        private set
+
     /** Лист на самой карточке прячется, пока вместо него летит копия. */
     fun paperHidden(folderId: String): Boolean = open?.id == folderId && progress.value > 0.001f
 
@@ -140,6 +144,10 @@ class FolderMorph {
         open = folder
         withFrameNanos { }
         withFrameNanos { }
+        // Тяжёлый экран папки может разложиться позже второго кадра. Без целей листы не полетят, а листы
+        // на карточке уже спрятаны: папка открылась бы «пустой».
+        var waited = 0
+        while (waited++ < 6 && sheets.indices.any { rectOf(targetCoords[it]) == null }) withFrameNanos { }
         to = sheets.indices.map { rectOf(targetCoords[it]) }
         if (reducedMotion) {
             plate.snapTo(1f)
@@ -174,36 +182,59 @@ class FolderMorph {
         progress.snapTo(0f)
         plate.snapTo(0f)
         flying = false
+        closing = false
         open = null
         sheets = emptyList()
         from = emptyList()
         to = emptyList()
     }
 
-    suspend fun collapse(reducedMotion: Boolean) {
+    /**
+     * [current] — файлы, которые экран папки показывает первыми сейчас. Листы должны лететь именно к ним:
+     * после пересоздания Activity (листов при открытии не было вовсе), пересортировки или просмотра новинки
+     * первые файлы уже не те, что при открытии. Раньше в этих случаях листы тихо не рисовались, и папка
+     * закрывалась без полёта.
+     */
+    suspend fun collapse(reducedMotion: Boolean, current: List<VideoFile>? = null) {
         val folder = open ?: return
-        // Те же `from` (карточка папки) и `to` (карточки файлов), что и при открытии: прогресс идёт
-        // от 1 к 0, поэтому копии летят обратно. Раньше концы были переставлены ещё раз, и листы
-        // летели в ту же сторону, что и при открытии.
-        from = sheets.indices.map { rectOf(paperCoords["${folder.id}#$it"]) }
-        to = sheets.indices.map { rectOf(targetCoords[it]) }
-        if (reducedMotion) {
-            progress.snapTo(0f)
-            plate.snapTo(0f)
-        } else {
-            flying = true
-            try {
-                progress.animateTo(0f, MotionTokens.largeSurfaceExit())
-            } finally {
-                flying = false
+        if (closing) return
+        closing = true
+        try {
+            if (current != null) sheets = current
+            // Те же `from` (карточка папки) и `to` (карточки файлов), что и при открытии: прогресс идёт
+            // от 1 к 0, поэтому копии летят обратно. Раньше концы были переставлены ещё раз, и листы
+            // летели в ту же сторону, что и при открытии.
+            val openedFrom = from
+            val openedTo = to
+            from = sheets.indices.map { rectOf(paperCoords["${folder.id}#$it"]) ?: openedFrom.getOrNull(it) }
+            // Карточка файла уехала с экрана (экран папки прокручен) и больше не размещена: лист прилетает
+            // сверху, а не пропадает. Раньше у такой цели не было прямоугольника, и лист не рисовался.
+            to = sheets.indices.map { i ->
+                rectOf(targetCoords[i]) ?: (openedTo.getOrNull(i) ?: from[i])?.let(::aboveScreen)
             }
-            // Листы уже лежат в открытой папке — теперь она закрывается.
-            plate.animateTo(0f, MotionTokens.springExit())
+            if (reducedMotion) {
+                progress.snapTo(0f)
+                plate.snapTo(0f)
+            } else {
+                flying = true
+                try {
+                    progress.animateTo(0f, MotionTokens.largeSurfaceExit())
+                } finally {
+                    flying = false
+                }
+                // Листы уже лежат в открытой папке — теперь она закрывается.
+                plate.animateTo(0f, MotionTokens.springExit())
+            }
+            open = null
+            sheets = emptyList()
+            targetCoords.clear()
+        } finally {
+            closing = false
         }
-        open = null
-        sheets = emptyList()
-        targetCoords.clear()
     }
+
+    /** Тот же прямоугольник сразу над верхней кромкой контейнера. */
+    private fun aboveScreen(rect: Rect): Rect = Rect(rect.left, -rect.height, rect.right, 0f)
 
     private fun rectOf(coords: LayoutCoordinates?): Rect? {
         val r = root ?: return null

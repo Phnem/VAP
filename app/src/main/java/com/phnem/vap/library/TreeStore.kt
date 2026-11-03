@@ -43,7 +43,11 @@ class TreeStore(private val context: Context) {
 
     fun add(tree: Uri) {
         runCatching {
-            context.contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // Запись нужна, чтобы удалять и переносить видео в этой папке; выбор папки системным окном даёт обе.
+            context.contentResolver.takePersistableUriPermission(
+                tree,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
         }
         prefs.edit { putStringSet(KEY_TREES, trees().map(Uri::toString).toSet() + tree.toString()) }
     }
