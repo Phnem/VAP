@@ -192,9 +192,6 @@
     <string name="video_scan_failed">Could not refresh device videos. Check access and tap Scan storage to retry.</string>
     <string name="storage_internal">Internal storage</string>
     <string name="storage_removable">Removable storage</string>
-    <string name="resume_session_title">Continue watching?</string>
-    <string name="resume_session_action">Continue</string>
-    <string name="resume_session_later">Later</string>
     <string name="sub_tools">Subtitles</string>
     <string name="sub_tracks">Tracks</string>
     <string name="sub_style">Style</string>

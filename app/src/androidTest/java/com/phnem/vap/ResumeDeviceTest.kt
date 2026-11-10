@@ -32,23 +32,16 @@ fun Instrumentation.runResumeDeviceTests() {
         awaitUi("resume source seek settled") { uiRead { controller.currentPosition in 11_900..12_100 } }
         SystemClock.sleep(250)
         library = openLibrary()
-        labelNode(targetContext.getString(R.string.resume_session_title))
-        uiScreenshot("resume-offer.png")
-        clickUi(labelNode(targetContext.getString(R.string.resume_session_later)))
-        check(uiRead { !controller.playWhenReady && controller.currentPosition in 11_900..12_100 })
+        // The library no longer asks "Continue watching?": the saved session just waits in the mini window.
+        SystemClock.sleep(800)
+        uiScreenshot("resume-library.png")
+        check(findUiNode { it.text?.toString() in setOf("Continue watching?", "Продолжить просмотр?") } == null) { "Resume prompt is back" }
+        check(uiRead { !controller.playWhenReady && controller.currentPosition in 11_900..12_100 }) { "Opening the library changed the saved session" }
         runOnMainSync { library!!.recreate() }; SystemClock.sleep(800)
-        check(findUiNode { it.text?.toString() == targetContext.getString(R.string.resume_session_title) } == null) { "Rotation repeated dismissed offer" }
-        // Finish the recreated activity, then launch a genuinely new library visit.
-        uiAutomation.executeShellCommand("input keyevent KEYCODE_BACK").close(); SystemClock.sleep(400)
-        library = openLibrary()
-        labelNode(targetContext.getString(R.string.resume_session_title))
-        val monitor = addMonitor(PlayerActivity::class.java.name, null, false)
-        clickUi(labelNode(targetContext.getString(R.string.resume_session_action)))
-        screen = waitForMonitorWithTimeout(monitor, 10000) as? PlayerActivity; removeMonitor(monitor); check(screen != null)
-        awaitUi("explicit resume starts from saved position") { uiRead { controller.isPlaying && controller.currentPosition in 12_000..20_000 } }
+        check(uiRead { !controller.playWhenReady && controller.currentPosition in 11_900..12_100 }) { "Recreation changed the saved session" }
     } catch (e: Throwable) { failure = e; runCatching { uiScreenshot("resume-failure.png") } }
     finally { runOnMainSync { player?.pause(); screen?.finish(); library?.finish(); future?.let { MediaController.releaseFuture(it) } } }
     finish(if (failure == null) Activity.RESULT_OK else Activity.RESULT_CANCELED, Bundle().apply {
-        putString("stream", if (failure == null) "PASS: resume prompt, Later keeps paused position, rotation does not repeat dismissed offer, Continue opens player at saved position\n" else "FAIL: ${android.util.Log.getStackTraceString(failure)}")
+        putString("stream", if (failure == null) "PASS: library opens without a resume prompt, saved session stays paused at its position across recreation\n" else "FAIL: ${android.util.Log.getStackTraceString(failure)}")
     })
 }

@@ -192,9 +192,6 @@
     <string name="video_scan_failed">Не удалось обновить видео устройства. Проверьте доступ и повторите сканирование.</string>
     <string name="storage_internal">Память устройства</string>
     <string name="storage_removable">Съёмный накопитель</string>
-    <string name="resume_session_title">Продолжить просмотр?</string>
-    <string name="resume_session_action">Продолжить</string>
-    <string name="resume_session_later">Позже</string>
     <string name="sub_tools">Субтитры</string>
     <string name="sub_tracks">Дорожки</string>
     <string name="sub_style">Вид</string>

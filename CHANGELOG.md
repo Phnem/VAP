@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.5-Stable — 2026-11-10
+
+Picture-in-picture that works, no more frozen picture, and no resume prompt.
+
+### Fixed
+
+- **Frozen or missing picture.** Some videos opened with a still frame or no picture at all while the sound and the timeline kept going, most often after going from the mini window back to the player. The player and the library mini window show the same playback and took the video surface away from each other; the picture is now handed over explicitly, so only one of them holds it at a time.
+- **Two PiP windows, one of them black.** The *PiP* button opened the system picture-in-picture window and the library with its mini window at once: the video played in the mini window and the system window stayed black. Leaving the app then kept the black window. The system window now always has the picture, and the mini window stays hidden while the player or its PiP window is on screen.
+- **Title of a video opened from another app.** A video opened from a file manager showed a number such as *881* instead of its name. The player now asks for the file name and cleans it the same way the library does.
+
+### Changed
+
+- **PiP goes to the home screen.** The *PiP* button at the bottom of the player puts the video in the system window and takes you to the home screen instead of the library.
+- **Folder button.** The button at the top of the player that returns to the library and keeps playing in the mini window is now a folder with an arrow, so it no longer looks like a second PiP button.
+
+### Removed
+
+- **"Continue watching?" prompt.** The library no longer asks to continue the last video when it opens. The last session still waits in the mini window, and the *Continue watching* row is unchanged.
+
+### Technical
+
+- `versionCode = 6`, `versionName = "v0.5-Stable"`.
+- No database changes. Updating from `v0.4-Stable` keeps your data.
+
 ## v0.4-Stable — 2026-11-03
 
 Tracks what is new, selects several videos at once, and closes folders reliably.

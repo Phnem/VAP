@@ -11,7 +11,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -27,7 +26,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +54,6 @@ import com.phnem.vap.R
 import com.phnem.vap.player.PlaybackConnection
 import com.phnem.vap.player.PlaybackService
 import com.phnem.vap.player.PlayerActivity
-import com.phnem.vap.ui.components.PanelBody
 import com.phnem.vap.ui.theme.MotionTokens
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -79,8 +76,6 @@ fun NowPlayingBar(modifier: Modifier = Modifier, onVisibilityChanged: (Boolean) 
     var playing by remember { mutableStateOf(false) }
     var hasItems by remember { mutableStateOf(false) }
     var videoSize by remember { mutableStateOf(VideoSize.UNKNOWN) }
-    var resumeChecked by rememberSaveable { mutableStateOf(false) }
-    var offerResume by rememberSaveable { mutableStateOf(false) }
     DisposableEffect(context) {
         var disposed = false
         val future = PlaybackConnection.connect(context)
@@ -100,12 +95,6 @@ fun NowPlayingBar(modifier: Modifier = Modifier, onVisibilityChanged: (Boolean) 
                     playing = it.isPlaying
                     hasItems = it.mediaItemCount > 0
                     videoSize = it.videoSize
-                    if (!resumeChecked) {
-                        resumeChecked = true
-                        offerResume = hasItems && !it.playWhenReady && it.currentPosition >= 5_000 &&
-                            it.playbackState != Player.STATE_ENDED &&
-                            (it.duration <= 0 || it.duration - it.currentPosition > maxOf(30_000L, it.duration / 20))
-                    }
                 }
             }
         }, ContextCompat.getMainExecutor(context))
@@ -118,22 +107,6 @@ fun NowPlayingBar(modifier: Modifier = Modifier, onVisibilityChanged: (Boolean) 
     }
     LaunchedEffect(hasItems) { onVisibilityChanged(hasItems) }
     if (!hasItems) return
-    // Решение «позже» фиксируется сразу (offerResume переживает пересоздание), а шторка дорисовывает уход.
-    var offerSheet by remember { mutableStateOf(offerResume) }
-    if (offerResume) offerSheet = true
-    if (offerSheet) com.phnem.vap.ui.components.VapSheet({ offerSheet = false }, isDark = com.phnem.vap.ui.theme.isAppInDarkTheme(), immersive = false,
-        onClosing = { offerResume = false }) { close ->
-        com.phnem.vap.ui.components.PanelHeader(stringResource(R.string.resume_session_title))
-        PanelBody { com.phnem.vap.ui.components.PanelText(title) }
-        com.phnem.vap.ui.components.PanelFooter {
-            com.phnem.vap.ui.components.PanelButton(stringResource(R.string.resume_session_action), {
-                controller?.let { if (it.playbackState == Player.STATE_IDLE) it.prepare(); it.play() }
-                context.startActivity(Intent(context, PlayerActivity::class.java).setAction(PlaybackService.ACTION_RESUME))
-                close()
-            }, primary = true, modifier = Modifier.fillMaxWidth())
-            com.phnem.vap.ui.components.PanelButton(stringResource(R.string.resume_session_later), close, modifier = Modifier.fillMaxWidth())
-        }
-    }
     val active = controller ?: return
     MiniWindow(
         controller = active,
@@ -215,25 +188,37 @@ private fun MiniWindow(
         LayoutInflater.from(context).inflate(R.layout.vap_mini_player_view, null) as PlayerView
     }
     // Кадр показывается, пока библиотека на экране; на время плеера или ухода в фон поверхность отдаётся ему.
+    // Пока виден сам плеер (в том числе в системном PiP), окно прячется и кадр не трогает: иначе видео
+    // оказывалось здесь, а PiP оставался чёрным. Передача кадра — через [VideoOutput].
+    val playerOnScreen = com.phnem.vap.player.VideoOutput.playerOnScreen.value
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, controller, playerView) {
+    DisposableEffect(lifecycleOwner, controller, playerView, playerOnScreen) {
+        fun attach() {
+            if (playerOnScreen) return
+            com.phnem.vap.player.VideoOutput.claim(playerView) { playerView.player = null }
+            playerView.player = controller
+        }
+        fun detach() {
+            com.phnem.vap.player.VideoOutput.drop(playerView)
+            playerView.player = null
+        }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> playerView.player = controller
-                Lifecycle.Event.ON_STOP -> playerView.player = null
+                Lifecycle.Event.ON_START -> attach()
+                Lifecycle.Event.ON_STOP -> detach()
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) playerView.player = controller
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) attach()
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            playerView.player = null
+            detach()
         }
     }
 
     Box(modifier.fillMaxSize().onSizeChanged { area = it }) {
-        if (!ready) return@Box
+        if (!ready || playerOnScreen) return@Box
         Box(
             Modifier
                 .offset { IntOffset(x.value.roundToInt(), y.value.roundToInt()) }

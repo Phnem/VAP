@@ -672,7 +672,7 @@ fun PlayerControlsOverlay(
                         iconSize = TOP_DOCK_ICON, onClick = onOpenSettings)
                     if (onLibrary != null) {
                         DockIconButton(
-                            icon = painterResource(R.drawable.ic_vap_folder),
+                            icon = painterResource(R.drawable.ic_vap_folder_move),
                             contentDescription = androidx.compose.ui.res.stringResource(R.string.player_library),
                             tint = Color.White,
                             iconSize = TOP_DOCK_ICON,

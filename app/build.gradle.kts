@@ -24,8 +24,8 @@ android {
         applicationId = "com.phnem.vap"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "v0.4-Stable"
+        versionCode = 6
+        versionName = "v0.5-Stable"
         // Откуда встроенное обновление берёт релизы.
         buildConfigField("String", "GITHUB_OWNER", "\"Phnem\"")
         buildConfigField("String", "GITHUB_REPO", "\"VAP\"")

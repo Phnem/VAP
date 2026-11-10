@@ -136,9 +136,9 @@ class PipActionsController(private val activity: Activity) {
         runCatching { activity.setPictureInPictureParams(buildParams()) }
     }
 
-    fun enterPip() {
-        runCatching { activity.enterPictureInPictureMode(buildParams()) }
-    }
+    /** @return ушло ли окно в PiP (система может отказать: режим выключен в настройках). */
+    fun enterPip(): Boolean =
+        runCatching { activity.enterPictureInPictureMode(buildParams()) }.getOrDefault(false)
 
     private fun buildParams(): PictureInPictureParams {
         val builder = PictureInPictureParams.Builder().setAspectRatio(aspectRatio())

@@ -104,10 +104,8 @@ fun Instrumentation.runServerDeviceTests() {
         val monitor = addMonitor(MainActivity::class.java.name, null, false)
         uiAutomation.executeShellCommand("am start -W -f 0x10008000 -n com.phnem.vap/.MainActivity").close()
         activity = waitForMonitorWithTimeout(monitor, 10000) as? MainActivity; removeMonitor(monitor); check(activity != null)
-        awaitUi("network menu after optional resume offer") {
-            val later = findUiNode { it.text?.toString() == targetContext.getString(R.string.resume_session_later) }
-            if (later != null) { runCatching { clickUi(later) }; false }
-            else if (findUiNode { it.text?.toString() == targetContext.getString(R.string.network_sources) } != null) true
+        awaitUi("network menu") {
+            if (findUiNode { it.text?.toString() == targetContext.getString(R.string.network_sources) } != null) true
             else { findUiNode { it.text?.toString() == targetContext.getString(R.string.library_title) }?.let { runCatching { clickUi(it) } }; false }
         }
         clickUi(labelNode(targetContext.getString(R.string.network_sources)))

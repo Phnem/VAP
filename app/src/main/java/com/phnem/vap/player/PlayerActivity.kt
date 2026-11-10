@@ -73,7 +73,13 @@ class PlayerActivity : ComponentActivity(), PipHostActivity {
                     if (connected != null) PlayerScreen(
                         exoPlayer = connected,
                         isInPip = pipState.value,
-                        onEnterPip = { pipActions.enterPip() },
+                        // Системный PiP — окно на рабочем столе: без ухода домой под ним открылась бы библиотека.
+                        onEnterPip = {
+                            if (pipActions.enterPip()) runCatching {
+                                startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            }
+                        },
                         // «Свернуть»: воспроизведение продолжается в мини-окне библиотеки (остановка — крестик на нём).
                         onBack = { leavePlayer(showLibrary = true) },
                         // Звук остаётся в сервисе. Раньше библиотека поднималась НАД плеером, и следующий запуск
@@ -107,13 +113,29 @@ class PlayerActivity : ComponentActivity(), PipHostActivity {
         val starts = if (trusted) request.getLongArrayExtra(EXTRA_POSITIONS) else null
         val items = if (!uris.isNullOrEmpty()) uris.mapIndexed { index, uri ->
             PlayableItem(uri, titles.getOrNull(index).orEmpty(), types.getOrNull(index)?.takeIf { it in NETWORK_MIMES }, com.phnem.vap.network.ServerPlaybackRef.parse(refs.getOrNull(index)), starts?.getOrNull(index)?.coerceAtLeast(0) ?: 0)
-        } else request.data?.let { listOf(PlayableItem(it.toString(), it.lastPathSegment.orEmpty(), request.type?.takeIf { type -> type in NETWORK_MIMES })) }.orEmpty()
+        } else request.data?.let { listOf(PlayableItem(it.toString(), externalTitle(it), request.type?.takeIf { type -> type in NETWORK_MIMES })) }.orEmpty()
         if (items.isEmpty()) { leavePlayer(showLibrary = true); return }
         val index = request.getIntExtra(EXTRA_START_INDEX, 0).coerceIn(items.indices)
         val position = if (items[index].server != null) items[index].startPositionMs else VapData.history(this).resumePosition(items[index].uri)
         connected.setMediaItems(items.map { it.toMediaItem() }, index, position)
         connected.prepare()
         connected.play()
+    }
+
+    /**
+     * Заголовок видео, открытого из другого приложения. У `content://` последний сегмент — номер записи
+     * («881»), поэтому имя файла спрашиваем у провайдера и чистим так же, как библиотека.
+     */
+    private fun externalTitle(uri: android.net.Uri): String {
+        val provided = if (uri.scheme == "content") runCatching {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) it.getString(0) else null
+            }
+        }.getOrNull() else null
+        val raw = provided?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment.orEmpty()
+        val extension = raw.substringAfterLast('.', "")
+        val name = if (extension.length in 2..4) raw.dropLast(extension.length + 1) else raw
+        return com.phnem.vap.library.EpisodeParser.cleanTitle(name).ifBlank { raw }
     }
 
     /** Закрыть плеер: пауза и возврат в библиотеку. [showLibrary] false — окно уже закрыто системой (PiP). */
@@ -132,8 +154,14 @@ class PlayerActivity : ComponentActivity(), PipHostActivity {
         finish()
     }
 
+    override fun onStart() {
+        super.onStart()
+        VideoOutput.playerStarted()
+    }
+
     override fun onStop() {
         super.onStop()
+        VideoOutput.playerStopped()
         if (wasInPip && !isInPictureInPictureMode && !isChangingConfigurations && !isFinishing) closePlayer(showLibrary = false)
     }
 

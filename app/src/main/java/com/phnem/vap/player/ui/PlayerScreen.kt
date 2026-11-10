@@ -305,6 +305,7 @@ fun PlayerScreen(
                 PlayerView(ctx).apply {
                     subtitleView?.visibility = android.view.View.GONE
                     nativePlayerView = this
+                    com.phnem.vap.player.VideoOutput.claim(this) { player = null }
                     player = exoPlayer
                     useController = false
                     layoutParams = ViewGroup.LayoutParams(
@@ -321,8 +322,25 @@ fun PlayerScreen(
                 // Пока идёт воспроизведение — не даём экрану гаснуть/затемняться.
                 view.keepScreenOn = isPlaying
             },
-            onRelease = { view -> nativePlayerView = null; view.player = null },
+            onRelease = { view ->
+                nativePlayerView = null
+                com.phnem.vap.player.VideoOutput.drop(view)
+                view.player = null
+            },
         )
+        // Кадр мог забрать другой экран, пока этот был остановлен (PiP при погашенном дисплее): возвращаем.
+        val surfaceLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+        DisposableEffect(surfaceLifecycle, nativePlayerView) {
+            val view = nativePlayerView
+            val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_START && view != null && view.player == null) {
+                    com.phnem.vap.player.VideoOutput.claim(view) { view.player = null }
+                    view.player = exoPlayer
+                }
+            }
+            surfaceLifecycle.lifecycle.addObserver(observer)
+            onDispose { surfaceLifecycle.lifecycle.removeObserver(observer) }
+        }
 
         val subtitleSettings = subtitlePreview ?: fileSettings?.subtitles ?: com.phnem.vap.player.subtitles.SubtitleSettings()
         val assSource = subtitleSettings.sources.firstOrNull { it.id == subtitleSettings.selection && it.format == "ass" }

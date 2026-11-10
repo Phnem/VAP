@@ -85,7 +85,6 @@ fun Instrumentation.runNetworkDeviceTests() {
         val monitor = addMonitor(MainActivity::class.java.name, null, false)
         uiAutomation.executeShellCommand("am start -W -f 0x10008000 -n com.phnem.vap/.MainActivity").close()
         activity = waitForMonitorWithTimeout(monitor, 10000) as? MainActivity; removeMonitor(monitor); check(activity != null)
-        clickUi(labelNode(targetContext.getString(R.string.resume_session_later)))
         clickUi(labelNode(targetContext.getString(R.string.library_title)))
         clickUi(labelNode(targetContext.getString(R.string.network_sources)))
         labelNode(connection.name)
