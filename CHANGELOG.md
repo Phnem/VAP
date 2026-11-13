@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.6-Stable — 2026-11-13
+
+Pinch zoom that never drags the picture, and new episodes that show up right away.
+
+### Fixed
+
+- **Zoom moved the picture.** Pinching to change the scale also dragged the picture, and once the video was zoomed a single finger panned it instead of changing brightness, volume or the playback position. A pinch now only scales the picture around the centre of the screen. One finger always keeps its normal job, zoomed or not, and hold-to-speed works in a zoomed video too.
+- **New episodes appeared hours late.** A file written by another app (a downloader, a torrent client) can stay in the system media database as "pending", and VAP, like any other app, does not see pending files until the system scans them, which can take hours. After every scan VAP now looks in the folders it already knows (and their new subfolders) for video files missing from the database, asks the system to index them and refreshes the list. This runs in the background, does not hold the refresh spinner, and tries each file once.
+
+### Changed
+
+- Dragging the picture while zoomed is gone: the picture can no longer be moved, only scaled.
+
+### Technical
+
+- `versionCode = 7`, `versionName = "v0.6-Stable"`.
+- No database changes. Updating from `v0.5-Stable` keeps your data.
+
 ## v0.5-Stable — 2026-11-10
 
 Picture-in-picture that works, no more frozen picture, and no resume prompt.

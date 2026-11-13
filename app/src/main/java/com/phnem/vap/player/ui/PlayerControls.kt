@@ -329,7 +329,7 @@ fun PlayerControlsOverlay(
             .pointerInput(locked, duration, pinchState, settings, previewUri, viewport) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
-                    val holdZone = !locked && settings.holdToSpeed && !(settings.pinchZoom && viewport.canPan) &&
+                    val holdZone = !locked && settings.holdToSpeed &&
                         isSpeedHoldZone(down.position.x, size.width.toFloat()) &&
                         !pinchState.swipesBlocked()
                     if (holdZone) {
@@ -402,7 +402,7 @@ fun PlayerControlsOverlay(
                 detectDragGestures(
                     onDragStart = { offset ->
                         // Во время удержания палец принадлежит ускорению, а не свайпам.
-                        blocked = pinchState.swipesBlocked() || speedHeld || (settings.pinchZoom && viewport.canPan)
+                        blocked = pinchState.swipesBlocked() || speedHeld
                         axis = DragAxis.Undecided
                         totalX = 0f
                         totalY = 0f

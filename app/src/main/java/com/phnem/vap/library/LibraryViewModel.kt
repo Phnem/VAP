@@ -214,7 +214,11 @@ class LibraryViewModel(private val app: Application) : AndroidViewModel(app) {
                 scan.value = published
                 hasSources.value = trees.trees().isNotEmpty() || latestAccess != VideoAccess.NONE
                 withContext(Dispatchers.IO) { cache.save(saf) }
-                if (latestAccess != access) rescan() else submitThumbnails(scan.value, sweep = !scanFailed.value)
+                if (latestAccess != access) rescan() else {
+                    submitThumbnails(scan.value, sweep = !scanFailed.value)
+                    // Separate job: the list is already on screen, the probe must not hold the spinner.
+                    if (!scanFailed.value) viewModelScope.launch { if (deviceScanner.indexStray(indexed)) rescan() }
+                }
             } finally {
                 if (generation == scanGeneration) scanning.value = false
             }

@@ -2,15 +2,21 @@ package com.phnem.vap.library
 
 import android.content.ContentUris
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.os.Build
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import com.phnem.vap.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.coroutineContext
+import kotlin.coroutines.resume
 
 /** Queries only MediaStore.Video on every mounted shared volume. No all-files permission. */
 class DeviceVideoScanner(private val context: Context) {
@@ -44,6 +50,67 @@ class DeviceVideoScanner(private val context: Context) {
         }
         out
     }
+    /** `path|size|mtime` of files already handed to the media scanner: an unindexable file is tried once, not on every rescan. */
+    private val handedOver = HashSet<String>()
+    private var lastProbe = 0L
+
+    /**
+     * A download that bypassed MediaStore stays invisible until the system's own idle scan, which can be hours
+     * away. Looks for video files next to the indexed ones (same folders, and their new subfolders) that
+     * MediaStore does not know and asks the scanner to index them. Returns true when something was submitted,
+     * i.e. the caller should query MediaStore again.
+     */
+    suspend fun indexStray(records: List<IndexedVideo>): Boolean {
+        val stray = withContext(Dispatchers.IO) { findStray(records) }
+        if (stray.isEmpty()) return false
+        withTimeoutOrNull(SCAN_TIMEOUT_MS) {
+            suspendCancellableCoroutine<Unit> { cont ->
+                val left = AtomicInteger(stray.size)
+                MediaScannerConnection.scanFile(context, stray.toTypedArray(), null) { _, _ ->
+                    if (left.decrementAndGet() == 0 && cont.isActive) cont.resume(Unit)
+                }
+            }
+        }
+        return true
+    }
+
+    private fun findStray(records: List<IndexedVideo>): List<String> {
+        val now = SystemClock.elapsedRealtime()
+        if (VideoPermissions.access(context) == VideoAccess.NONE || now - lastProbe < PROBE_GAP_MS) return emptyList()
+        lastProbe = now
+        val known = records.groupBy({ it.volume to DeviceVideoIndex.directory(it.directory) }, { it.file.name }).mapValues { it.value.toHashSet() }
+        val found = ArrayList<String>()
+        fun consider(file: File, indexedNames: Set<String>) {
+            if (found.size >= MAX_STRAY || !file.isFile || file.name.startsWith(".") || file.name in indexedNames) return
+            if (!FolderScanner.isVideo(file.name, null) || System.currentTimeMillis() - file.lastModified() < SETTLE_MS) return
+            if (handedOver.add("${file.path}|${file.length()}|${file.lastModified()}")) found += file.path
+        }
+        val newDirs = ArrayList<File>()
+        for ((place, names) in known) {
+            val (volume, directory) = place
+            val root = volumeRoot(volume) ?: continue
+            for (child in (if (directory.isEmpty()) root else File(root, directory)).listFiles().orEmpty()) {
+                if (child.isDirectory) {
+                    val childPath = if (directory.isEmpty()) child.name else "$directory/${child.name}"
+                    if (!child.name.startsWith(".") && (volume to childPath) !in known) newDirs += child
+                } else consider(child, names)
+            }
+        }
+        for (dir in newDirs) dir.listFiles().orEmpty().forEach { consider(it, emptySet()) }
+        return found
+    }
+
+    private fun volumeRoot(volume: String): File? =
+        if (volume == "external_primary" || volume == "external") android.os.Environment.getExternalStorageDirectory()
+        else File("/storage").listFiles()?.firstOrNull { it.name.equals(volume, ignoreCase = true) }
+
+    private companion object {
+        const val PROBE_GAP_MS = 3_000L
+        const val SCAN_TIMEOUT_MS = 10_000L
+        const val SETTLE_MS = 3_000L
+        const val MAX_STRAY = 200
+    }
+
     fun folders(records: List<IndexedVideo>) = DeviceVideoIndex.folders(records,
         context.getString(R.string.storage_internal), context.getString(R.string.storage_removable))
 
