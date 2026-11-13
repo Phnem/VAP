@@ -15,3 +15,4 @@ The documents below record design decisions and reports from individual developm
 | Network and casting | [Network sources](stage7-network.md), [servers](stage7-servers.md), [DLNA and Cast](stage7-cast.md) |
 | AI tools | [Whisper](stage8-whisper.md), [translation](stage8-translation.md), [Smart Sync](stage8-sync.md) |
 | Performance | [Measurement plan](perf-plan.md), [tools](../tools/perf/README.md) |
+| Website | [Screenshots and phone mockups for the Vetro Studio site](site-screenshots.md) (Russian), tool: [`tools/site-shots.py`](../tools/site-shots.py) |
