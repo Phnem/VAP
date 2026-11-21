@@ -17,6 +17,23 @@
 | `ui/shared/components/IosListComponents.kt` (`IosSwitch`) | `ui/components/VapPanel.kt` | эластичный переключатель 51×31 |
 | `ui/shared/components/SharedComponents.kt` (`AnimatedOneUiTextField`) | `PanelTextField` | подпись над полем, рамка оранжевая в фокусе |
 | `GlassRangeSlider` / капсульный трек | `PanelSlider` | трек-капсула, оранжевая заливка, бегунок-капсула |
+| `ui/shared/mascot/*` (`MascotRig`, `MascotMotion`, `MascotScenes`, `MascotEmptyState`) | `ui/mascot/*` | перенос без изменений рига, кривых и сцен; убраны сцена Coffee (в VAP нет шторки поддержки) и кнопка действия у `MascotEmptyState` |
+
+## Маскот
+
+Анимированный маскот Vetro показывает пустые состояния и ошибки. Сцена — чистая функция от времени цикла (`SceneSpec`), рисуется на Canvas, при системном «Отключить анимации» стоит статичным кадром.
+
+| Событие в VAP | Сцена |
+|---|---|
+| Нет папок (первый запуск, `EmptyLibrary`) | `Hello` |
+| Ничего не найдено по поиску (`NothingFound(searching = true)`) | `Search` |
+| Пустая папка / пустой фильтр / нет скрытых (`NothingFound(searching = false)`) | `Empty` |
+| Нет плейлистов, пустая очередь, пустой плейлист | `Empty` |
+| Сетевой источник: в папке нет видео | `Empty` (шторка, `PanelMascot`) |
+| Трансляция: идёт поиск устройств | `Search` (шторка, `PanelMascot`) |
+| Плеер: файл не воспроизводится | `Question` |
+
+`MascotEmptyState` — маскот + заголовок для экранов, `PanelMascot` — маскот + строка текста внутри шторки (тема из `LocalPanelDark`).
 
 ## Состав `ui/components`
 

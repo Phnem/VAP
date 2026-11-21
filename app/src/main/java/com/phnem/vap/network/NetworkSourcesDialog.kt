@@ -36,6 +36,8 @@ import com.phnem.vap.ui.components.PanelSection
 import com.phnem.vap.ui.components.PanelText
 import com.phnem.vap.ui.components.PanelTextField
 import com.phnem.vap.ui.components.VapSheet
+import com.phnem.vap.ui.mascot.MascotScene
+import com.phnem.vap.ui.mascot.PanelMascot
 import com.phnem.vap.ui.theme.isAppInDarkTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -164,7 +166,7 @@ fun NetworkSourcesDialog(onPlay: (List<PlayableItem>) -> Unit, onDismiss: () -> 
                         if (trail.isEmpty()) { browser = null; entries = emptyList() }
                         else trail.last().let { (parent, label) -> browse(current, parent, label, back = true) }
                     }, enabled = !busy)
-                    if (entries.isEmpty() && !busy) PanelText(stringResource(R.string.network_empty))
+                    if (entries.isEmpty() && !busy) PanelMascot(MascotScene.Empty, stringResource(R.string.network_empty))
                     if (entries.size >= 5000 || current.isServer || current.kind == NetworkKind.DLNA) PanelHint(stringResource(R.string.network_listing_limit))
                     entries.drop(entryPage * 100).take(100).forEach { entry ->
                         PanelRow((if (entry.folder) "▸ " else "▶ ") + entry.name, {

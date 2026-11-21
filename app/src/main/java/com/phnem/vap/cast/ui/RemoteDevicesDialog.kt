@@ -35,6 +35,8 @@ import com.phnem.vap.ui.components.PanelSwitchRow
 import com.phnem.vap.ui.components.PanelText
 import com.phnem.vap.ui.components.PanelTextField
 import com.phnem.vap.ui.components.VapSheet
+import com.phnem.vap.ui.mascot.MascotScene
+import com.phnem.vap.ui.mascot.PanelMascot
 import kotlinx.coroutines.launch
 
 /** Трансляция: устройства и управление воспроизведением на приёмнике. Шторка Collection. */
@@ -101,7 +103,7 @@ fun RemoteDevicesDialog(runtime: RemoteRuntime, onDismiss: () -> Unit) {
             } else {
                 PanelHint(stringResource(R.string.cast_network_note))
                 PanelSwitchRow(stringResource(R.string.cast_subtitles), subtitles, { subtitles = it })
-                if (devices.isEmpty()) PanelText(stringResource(R.string.cast_empty))
+                if (devices.isEmpty()) PanelMascot(MascotScene.Search, stringResource(R.string.cast_empty))
                 devices.forEach { device ->
                     PanelRow(device.name, { action { runtime.cast(device, subtitles) } }, subtitle = device.protocolLabel, enabled = !busy)
                 }

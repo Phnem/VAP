@@ -114,7 +114,9 @@ import com.phnem.vap.library.ThumbnailCache
 import com.phnem.vap.library.VideoFile
 import com.phnem.vap.library.VideoFolder
 import com.phnem.vap.player.model.PlayableItem
-import com.phnem.vap.ui.brand.VapWordmark
+import com.phnem.vap.ui.mascot.MascotEmptyState
+import com.phnem.vap.ui.mascot.MascotIllustration
+import com.phnem.vap.ui.mascot.MascotScene
 import com.phnem.vap.ui.components.SpringPillRow
 import com.phnem.vap.ui.components.pulltorefresh.PullRefreshHost
 import com.phnem.vap.ui.onboarding.ThemeChoice
@@ -856,7 +858,7 @@ private fun LibraryHome(
                 item(span = { GridItemSpan(maxLineSpan) }) { Header() }
                 item(span = { GridItemSpan(maxLineSpan) }) { FilterChips(settings.filter, onFilter, onSortClick) }
                 if (continueItems.isNotEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { ContinueRow(continueItems, onContinue) }
-                if (folders.isEmpty() && !state.scanning) item(span = { GridItemSpan(maxLineSpan) }) { NothingFound() }
+                if (folders.isEmpty() && !state.scanning) item(span = { GridItemSpan(maxLineSpan) }) { NothingFound(state.query.isNotBlank()) }
                 items(folders, key = { it.id }) { folder ->
                     val sheets = state.cardSheets[folder.id] ?: cardSheets(folder)
                     FolderCard(
@@ -881,7 +883,7 @@ private fun LibraryHome(
                 item { Header() }
                 item { FilterChips(settings.filter, onFilter, onSortClick) }
                 if (continueItems.isNotEmpty()) item { ContinueRow(continueItems, onContinue) }
-                if (folders.isEmpty() && !state.scanning) item { NothingFound() }
+                if (folders.isEmpty() && !state.scanning) item { NothingFound(state.query.isNotBlank()) }
                 items(folders, key = { it.id }) { folder ->
                     FolderRow(
                         folder = folder,
@@ -1116,14 +1118,12 @@ private fun ContinueCard(item: ContinueItem, onClick: () -> Unit) {
 }
 
 @Composable
-fun NothingFound() {
-    Text(
-        text = stringResource(R.string.nothing_found),
-        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-        fontFamily = SnProFamily,
-        fontSize = 15.sp,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+fun NothingFound(searching: Boolean) {
+    MascotEmptyState(
+        scene = if (searching) MascotScene.Search else MascotScene.Empty,
+        title = stringResource(R.string.nothing_found),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+        illustrationSize = 170.dp,
     )
 }
 
@@ -1250,8 +1250,8 @@ private fun EmptyLibrary(onAddFolder: () -> Unit, onRequestVideoAccess: () -> Un
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        VapWordmark(color = MaterialTheme.colorScheme.primary, modifier = Modifier.height(56.dp))
-        Spacer(Modifier.height(28.dp))
+        MascotIllustration(MascotScene.Hello, Modifier.size(210.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             stringResource(R.string.empty_title),
             color = ink,

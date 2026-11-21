@@ -363,8 +363,10 @@ fun PlayerScreen(
 
         if (playbackFailed || unsupportedVideo) {
             // Выше центра: по центру стоят кнопки управления, блок ошибки не должен их перекрывать.
-            androidx.compose.foundation.layout.Column(Modifier.align(androidx.compose.ui.BiasAlignment(0f, -0.5f)),
+            androidx.compose.foundation.layout.Column(Modifier.align(androidx.compose.ui.BiasAlignment(0f, -1f)),
                 horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                com.phnem.vap.ui.mascot.MascotIllustration(com.phnem.vap.ui.mascot.MascotScene.Question,
+                    Modifier.requiredSize(84.dp), isDark = true)
                 com.phnem.vap.ui.components.PanelText(
                     androidx.compose.ui.res.stringResource(if (unsupportedVideo) com.phnem.vap.R.string.video_unsupported_track else com.phnem.vap.R.string.player_error_unsupported))
                 androidx.compose.foundation.layout.Spacer(Modifier.height(12.dp))

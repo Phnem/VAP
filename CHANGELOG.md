@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.7-Stable — 2026-11-21
+
+The Vetro mascot moves into VAP: empty screens and errors now have a character.
+
+### Added
+
+- **The mascot in empty states.** The animated Vetro mascot from Vetro Collection (a squared-off body with a glowing face, drawn on a canvas and reacting with its own scene to each event) now appears in these places:
+  - first launch with no folders: waving, with a heart;
+  - a search with no results: moves a magnifier over the floor, then lifts it;
+  - an empty folder, an empty filter, hidden folders, no playlists, an empty queue or playlist: opens an empty box;
+  - looking for Cast devices: the same magnifier scene, inside the sheet;
+  - an empty network folder: the empty box, inside the sheet;
+  - a file that cannot be played: scratches its head under a question mark, above *Retry* and *Media information*.
+- It follows the light and dark themes of the app and the always-dark player panels, and stands still in an expressive pose when the system asks to remove animations.
+
+### Changed
+
+- The first-launch screen without folders shows the mascot instead of the VAP wordmark.
+- The grey "Nothing found" line in the library, folders, playlists and the queue became the mascot with a title.
+
+### Technical
+
+- New package `ui/mascot`: the rig, curves and scenes are copied from Vetro Collection without changes; the Coffee scene (support sheet) and the action button of the empty state were left out. `PanelMascot` shows the mascot inside sheets.
+- `versionCode = 8`, `versionName = "v0.7-Stable"`.
+- No database changes. Updating from `v0.6-Stable` keeps your data.
+
 ## v0.6-Stable — 2026-11-13
 
 Pinch zoom that never drags the picture, and new episodes that show up right away.

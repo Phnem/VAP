@@ -46,6 +46,8 @@ import com.phnem.vap.data.QueueEntry
 import com.phnem.vap.library.LibraryUiState
 import com.phnem.vap.library.LibraryViewModel
 import com.phnem.vap.player.model.PlayableItem
+import com.phnem.vap.ui.mascot.MascotEmptyState
+import com.phnem.vap.ui.mascot.MascotScene
 import com.phnem.vap.ui.theme.SnProFamily
 import kotlinx.coroutines.flow.flowOf
 
@@ -99,13 +101,11 @@ fun PlaylistsScreen(
             }
             if (state.playlists.isEmpty()) {
                 item {
-                    Text(
-                        stringResource(R.string.playlists_empty),
-                        color = ink.copy(alpha = 0.5f),
-                        fontFamily = SnProFamily,
-                        fontSize = 15.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                    MascotEmptyState(
+                        scene = MascotScene.Empty,
+                        title = stringResource(R.string.playlists_empty),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        illustrationSize = 160.dp,
                     )
                 }
             }
@@ -214,13 +214,11 @@ fun PlaylistsScreen(
             }
         } else {
             item {
-                Text(
-                    stringResource(if (isQueue) R.string.queue_empty else R.string.playlist_empty),
-                    color = ink.copy(alpha = 0.5f),
-                    fontFamily = SnProFamily,
-                    fontSize = 15.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                MascotEmptyState(
+                    scene = MascotScene.Empty,
+                    title = stringResource(if (isQueue) R.string.queue_empty else R.string.playlist_empty),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    illustrationSize = 160.dp,
                 )
             }
         }

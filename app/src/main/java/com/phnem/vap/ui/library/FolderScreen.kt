@@ -292,7 +292,7 @@ fun FolderScreen(
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) { Header() }
                 item(span = { GridItemSpan(maxLineSpan) }) { FilterChips(settings.filter, onFilter, onSortClick) }
-                if (entries.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { NothingFound() }
+                if (entries.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { NothingFound(state.query.isNotBlank()) }
                 items(
                     entries,
                     key = { it.key },
@@ -307,7 +307,7 @@ fun FolderScreen(
             ) {
                 item { Header() }
                 item { FilterChips(settings.filter, onFilter, onSortClick) }
-                if (entries.isEmpty()) item { NothingFound() }
+                if (entries.isEmpty()) item { NothingFound(state.query.isNotBlank()) }
                 items(entries, key = { it.key }) { Item(it, cardWidth, grid = false) }
             }
         }
