@@ -71,7 +71,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -123,6 +125,7 @@ import com.phnem.vap.ui.onboarding.ThemeChoice
 import com.phnem.vap.ui.theme.MotionTokens
 import com.phnem.vap.ui.theme.SnProFamily
 import com.phnem.vap.ui.theme.rememberReducedMotion
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -264,7 +267,7 @@ fun LibraryRoot(
 
     fun back() {
         when {
-            morph.progress.isRunning || morph.closing -> Unit
+            morph.progress.isRunning || morph.closing || morph.scrubbing -> Unit
             stack.size > 1 -> stackKey = stack.dropLast(1).joinToString("\n")
             // Папка ещё не раскрылась (или не восстановлена после пересоздания Activity): закрывать нечего.
             stack.size == 1 && morph.open == null -> Unit
@@ -278,6 +281,48 @@ fun LibraryRoot(
                 stackKey = ""
                 frozenHome = null
             }
+        }
+    }
+
+    // Щипок двумя пальцами внутри папки. В корневой папке она закрывается вслед за пальцами (прогресс морфа 1:1),
+    // во вложенной щипок равен «назад» и срабатывает при отпускании.
+    val nestedPinch = remember { booleanArrayOf(false) }
+    fun pinchBegin(): Boolean {
+        val folder = rootFolder ?: return false
+        if (stack.size > 1) {
+            nestedPinch[0] = true
+            return !morph.progress.isRunning && !morph.closing
+        }
+        nestedPinch[0] = false
+        if (!morph.beginScrub(viewModel.cardSheets(folder))) return false
+        // Листы летят к тому, что экран папки показывает сейчас, а не к тому, что было при открытии.
+        scope.launch { morph.refreshScrubSheets(viewModel.prepareOpen(folder)) }
+        return true
+    }
+    fun pinchRatio(ratio: Float, timeMillis: Long) {
+        if (nestedPinch[0]) return
+        // Пальцы сходятся — прогресс падает быстрее, чем расстояние: папка успевает закрыться до сведения в точку.
+        // Пальцы расходятся — папка лишь чуть «поддаётся».
+        val p = (if (ratio >= 1f) 1f + (ratio - 1f) * 0.18f else 1f - (1f - ratio) * 1.48f).coerceIn(0f, 1.06f)
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { morph.scrub(p, timeMillis) }
+    }
+    fun pinchEnd(ratio: Float) {
+        if (nestedPinch[0]) {
+            nestedPinch[0] = false
+            if (ratio < 0.75f) back()
+            return
+        }
+        scope.launch {
+            val close = morph.progress.value < 0.7f || morph.scrubVelocity < -1.1f
+            if (!close) {
+                morph.cancelScrub(reduced)
+                return@launch
+            }
+            val folder = rootFolder
+            morph.collapse(reduced)
+            folder?.let { viewModel.markFolderSeen(it.id) }
+            stackKey = ""
+            frozenHome = null
         }
     }
 
@@ -366,9 +411,27 @@ fun LibraryRoot(
                 Box(
                     Modifier
                         .fillMaxSize()
+                        // До graphicsLayer: пальцы меряются в несжатых координатах, иначе сжатие экрана меняло бы отношение.
+                        .folderPinchClose(
+                            enabled = true,
+                            onBegin = ::pinchBegin,
+                            onRatio = ::pinchRatio,
+                            onEnd = ::pinchEnd,
+                        )
                         .graphicsLayer {
-                            alpha = (morph.progress.value * 1.4f - 0.2f).coerceIn(0f, 1f)
+                            val p = morph.progress.value
+                            alpha = (p * 1.4f - 0.2f).coerceIn(0f, 1f)
                             compositingStrategy = CompositingStrategy.ModulateAlpha
+                            // Пока папку ведёт щипок, экран сжимается к её карточке вслед за пальцами.
+                            if (morph.scrubbing) {
+                                val s = 0.5f + 0.5f * p.coerceIn(0f, 1.06f)
+                                scaleX = s
+                                scaleY = s
+                                val pivot = morph.pivot
+                                if (pivot.isSpecified && size.width > 0f && size.height > 0f) {
+                                    transformOrigin = TransformOrigin(pivot.x / size.width, pivot.y / size.height)
+                                }
+                            }
                         }
                         .background(MaterialTheme.colorScheme.background),
                 ) {

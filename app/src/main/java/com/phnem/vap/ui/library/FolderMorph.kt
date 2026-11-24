@@ -22,6 +22,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.center
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageShader
@@ -121,6 +122,25 @@ class FolderMorph {
     var closing = false
         private set
 
+    /**
+     * Папку закрывает щипок: прогресс идёт за пальцами, а после отпускания либо доезжает до закрытия,
+     * либо возвращается. Флаг живёт до конца этого доезда.
+     */
+    var scrubbing by mutableStateOf(false)
+        private set
+
+    /** Точка в координатах [root], к которой сжимается экран папки при щипке: центр карточки. */
+    var pivot: Offset = Offset.Unspecified
+        private set
+
+    /** Скорость прогресса щипка, 1/с: по ней решается, закрывать ли папку, если пальцы отпущены на полпути. */
+    var scrubVelocity = 0f
+        private set
+    private var scrubP = 1f
+    private var scrubTime = 0L
+    private var scrubFrom: List<Rect?> = emptyList()
+    private var scrubTo: List<Rect?> = emptyList()
+
     /** Лист на самой карточке прячется, пока вместо него летит копия. */
     fun paperHidden(folderId: String): Boolean = open?.id == folderId && progress.value > 0.001f
 
@@ -200,17 +220,12 @@ class FolderMorph {
         if (closing) return
         closing = true
         try {
-            if (current != null) sheets = current
-            // Те же `from` (карточка папки) и `to` (карточки файлов), что и при открытии: прогресс идёт
-            // от 1 к 0, поэтому копии летят обратно. Раньше концы были переставлены ещё раз, и листы
-            // летели в ту же сторону, что и при открытии.
-            val openedFrom = from
-            val openedTo = to
-            from = sheets.indices.map { rectOf(paperCoords["${folder.id}#$it"]) ?: openedFrom.getOrNull(it) }
-            // Карточка файла уехала с экрана (экран папки прокручен) и больше не размещена: лист прилетает
-            // сверху, а не пропадает. Раньше у такой цели не было прямоугольника, и лист не рисовался.
-            to = sheets.indices.map { i ->
-                rectOf(targetCoords[i]) ?: (openedTo.getOrNull(i) ?: from[i])?.let(::aboveScreen)
+            // После щипка концы полёта сняты в его начале: экран папки сейчас сжат, и его карточки стоят не там.
+            if (!scrubbing) {
+                if (current != null) sheets = current
+                val (f, t) = measureReturn(folder)
+                from = f.take(sheets.size)
+                to = t.take(sheets.size)
             }
             if (reducedMotion) {
                 progress.snapTo(0f)
@@ -218,7 +233,8 @@ class FolderMorph {
             } else {
                 flying = true
                 try {
-                    progress.animateTo(0f, MotionTokens.largeSurfaceExit())
+                    // После щипка прогресс доезжает с той скоростью, с которой пальцы его вели.
+                    progress.animateTo(0f, MotionTokens.largeSurfaceExit(), if (scrubbing) scrubVelocity else 0f)
                 } finally {
                     flying = false
                 }
@@ -230,6 +246,89 @@ class FolderMorph {
             targetCoords.clear()
         } finally {
             closing = false
+            scrubbing = false
+        }
+    }
+
+    /**
+     * Те же `from` (карточка папки) и `to` (карточки файлов), что и при открытии: прогресс идёт от 1 к 0, поэтому
+     * копии летят обратно. Раньше концы были переставлены ещё раз, и листы летели в ту же сторону, что и при
+     * открытии. Снимаются для всех трёх листов сразу: набор файлов может смениться, а прямоугольники — нет.
+     */
+    private fun measureReturn(folder: VideoFolder): Pair<List<Rect?>, List<Rect?>> {
+        val openedFrom = from
+        val openedTo = to
+        val f = (0 until MAX_SHEETS).map { rectOf(paperCoords["${folder.id}#$it"]) ?: openedFrom.getOrNull(it) }
+        // Карточка файла уехала с экрана (экран папки прокручен) и больше не размещена: лист прилетает
+        // сверху, а не пропадает. Раньше у такой цели не было прямоугольника, и лист не рисовался.
+        val t = (0 until MAX_SHEETS).map { i ->
+            rectOf(targetCoords[i]) ?: (openedTo.getOrNull(i) ?: f[i])?.let(::aboveScreen)
+        }
+        return f to t
+    }
+
+    /**
+     * Щипок начался. Прямоугольники снимаются сейчас, пока экран папки ещё не сжат; дальше прогресс ведут
+     * пальцы ([scrub]). `false` — сейчас щипок не принимается (идёт другой переход или папка не раскрыта).
+     */
+    fun beginScrub(fallback: List<VideoFile>): Boolean {
+        val folder = open ?: return false
+        if (scrubbing || closing || flying || progress.isRunning || progress.value < 0.999f) return false
+        if (sheets.isEmpty()) sheets = fallback.take(MAX_SHEETS)
+        val (f, t) = measureReturn(folder)
+        scrubFrom = f
+        scrubTo = t
+        from = f.take(sheets.size)
+        to = t.take(sheets.size)
+        val centers = f.filterNotNull().map { it.center }
+        pivot = if (centers.isNotEmpty()) {
+            Offset(centers.map { it.x }.average().toFloat(), centers.map { it.y }.average().toFloat())
+        } else {
+            root?.takeIf { it.isAttached }?.size?.toSize()?.center ?: Offset.Unspecified
+        }
+        scrubP = 1f
+        scrubTime = 0L
+        scrubVelocity = 0f
+        scrubbing = true
+        flying = true
+        return true
+    }
+
+    /** Листы должны лететь к тому, что экран папки показывает сейчас: набор мог смениться уже после открытия. */
+    fun refreshScrubSheets(current: List<VideoFile>) {
+        if (!scrubbing || closing || current.map { it.key } == sheets.map { it.key }) return
+        sheets = current.take(MAX_SHEETS)
+        from = scrubFrom.take(sheets.size)
+        to = scrubTo.take(sheets.size)
+    }
+
+    /** Пальцы ведут прогресс: 1 — папка открыта, 0 — закрыта. [timeMillis] — время события, по нему считается скорость. */
+    suspend fun scrub(p: Float, timeMillis: Long) {
+        if (!scrubbing) return
+        if (scrubTime != 0L) {
+            val dt = ((timeMillis - scrubTime) / 1000f).coerceAtLeast(0.008f)
+            scrubVelocity = 0.5f * scrubVelocity + 0.5f * (p - scrubP) / dt
+        }
+        scrubP = p
+        scrubTime = timeMillis
+        progress.snapTo(p)
+    }
+
+    /** Пальцы отпущены, закрывать не нужно: папка возвращается в раскрытое положение. */
+    suspend fun cancelScrub(reducedMotion: Boolean) {
+        if (!scrubbing || closing) return
+        try {
+            if (reducedMotion) {
+                progress.snapTo(1f)
+            } else {
+                try {
+                    progress.animateTo(1f, MotionTokens.largeSurfaceEnter(), scrubVelocity)
+                } finally {
+                    flying = false
+                }
+            }
+        } finally {
+            scrubbing = false
         }
     }
 

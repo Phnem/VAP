@@ -10,7 +10,7 @@ VAP (Vetro Android Player) brings the video player from Vetro Collection into it
 
 ## Download
 
-The current release is **v0.7-Stable**. Download signed APKs from [GitHub Releases](https://github.com/Phnem/VAP/releases/latest).
+The current release is **v0.7-Stable**. Download signed APKs from [GitHub Releases](https://github.com/Phnem/VAP/releases/latest). The pre-release **v0.8-Alpha** (pinch to close a folder) is on the [Releases page](https://github.com/Phnem/VAP/releases); the app never updates to an Alpha by itself.
 
 | APK | Choose this for |
 | --- | --- |

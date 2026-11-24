@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.8-Alpha — 2026-11-24
+
+A pre-release: a new gesture for leaving a folder. The in-app updater never offers Alpha builds, so install this one by hand.
+
+### Added
+
+- **Pinch to close a folder.** Inside an open folder, pinch two fingers together and the folder folds up as you pinch: the three sheets fly back to the folder card and the folder screen shrinks toward it, one to one with your fingers. Let go past about a fifth of the way, or with a quick pinch, and the folder finishes closing; let go sooner and it springs back open. Spreading the fingers makes the folder give a little. In a nested folder (tree mode) a pinch works like *Back* and goes up one level when you let go.
+
+### Technical
+
+- New `FolderPinchClose.kt`: a two-finger detector that takes the gesture before the list, taps and long press (the second finger cancels whatever the first one started; one finger is never touched).
+- `FolderMorph` gained a scrubbing mode (`beginScrub`, `scrub`, `cancelScrub`) on top of the existing progress, and `collapse` continues from the pinch with the finger velocity. The sheet start and end rectangles are measured when the pinch begins, while the folder screen is not yet shrunk.
+- Not done from the design reference: the zoom of the home screen and the on-screen hint line.
+- `versionCode = 9`, `versionName = "v0.8-Alpha"`.
+- No database changes. Updating from `v0.7-Stable` keeps your data.
+
 ## v0.7-Stable — 2026-11-21
 
 The Vetro mascot moves into VAP: empty screens and errors now have a character.
